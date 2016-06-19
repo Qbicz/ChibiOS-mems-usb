@@ -5,8 +5,9 @@
 
 # Compiler options here.
 ifeq ($(USE_OPT),)
-  USE_OPT = -O2 -fomit-frame-pointer -falign-functions=16 -ggdb
+  USE_OPT = -O0 -fomit-frame-pointer -falign-functions=16 -ggdb
   # Filip 17-06-2016: not using ggdb makes .elf smaller - from 430kB to 130kB
+  # Filip 19-06-2016: for debugging switch off optimization -O0
 endif
 
 # C specific options here (added to USE_OPT).

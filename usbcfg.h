@@ -17,10 +17,6 @@
 #ifndef _USBCFG_H_
 #define _USBCFG_H_
 
-extern const USBConfig usbcfg;
-extern SerialUSBConfig serusbcfg;
-extern SerialUSBDriver SDU1;
-
 #define FILIP_USB_RAW 1
 
 #if FILIP_USB_RAW

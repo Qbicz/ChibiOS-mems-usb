@@ -384,7 +384,7 @@
  *
  * @note    The default is @p FALSE.
  */
-#define CH_DBG_FILL_THREADS                 FALSE // Filip : TRUE
+#define CH_DBG_FILL_THREADS                 TRUE // Filip : TRUE
 
 /**
  * @brief   Debug option, threads profiling.

@@ -18,11 +18,11 @@
 #include "hal.h"
 #include "test.h"
 
-#include "chprintf.h"
-#include "shell.h"
+// #include "chprintf.h"
 #include "lis302dl.h"
 
 #include "usbcfg.h"
+#include "usb.h" // usbReceive / usbTransmit
 
 // defined in usbcfg.h:
 // #define FILIP_USB_RAW 1
@@ -32,7 +32,6 @@
 /* Command line related.                                                     */
 /*===========================================================================*/
 
-#define SHELL_WA_SIZE   THD_WORKING_AREA_SIZE(2048)
 #define TEST_WA_SIZE    THD_WORKING_AREA_SIZE(256)
 
 #if FILIP_USB_RAW
@@ -93,69 +92,6 @@ static THD_FUNCTION(Reader, arg) {
 }
 #endif
 
-static void cmd_mem(BaseSequentialStream *chp, int argc, char *argv[]) {
-  size_t n, size;
-
-  (void)argv;
-  if (argc > 0) {
-    chprintf(chp, "Usage: mem\r\n");
-    return;
-  }
-  n = chHeapStatus(NULL, &size);
-  chprintf(chp, "core free memory : %u bytes\r\n", chCoreGetStatusX());
-  chprintf(chp, "heap fragments   : %u\r\n", n);
-  chprintf(chp, "heap free total  : %u bytes\r\n", size);
-}
-
-static void cmd_threads(BaseSequentialStream *chp, int argc, char *argv[]) {
-  static const char *states[] = {CH_STATE_NAMES};
-  thread_t *tp;
-
-  (void)argv;
-  if (argc > 0) {
-    chprintf(chp, "Usage: threads\r\n");
-    return;
-  }
-  chprintf(chp, "    addr    stack prio refs     state\r\n");
-  tp = chRegFirstThread();
-  do {
-    chprintf(chp, "%08lx %08lx %4lu %4lu %9s\r\n",
-             (uint32_t)tp, (uint32_t)tp->p_ctx.r13,
-             (uint32_t)tp->p_prio, (uint32_t)(tp->p_refs - 1),
-             states[tp->p_state]);
-    tp = chRegNextThread(tp);
-  } while (tp != NULL);
-}
-
-static void cmd_test(BaseSequentialStream *chp, int argc, char *argv[]) {
-  thread_t *tp;
-
-  (void)argv;
-  if (argc > 0) {
-    chprintf(chp, "Usage: test\r\n");
-    return;
-  }
-  tp = chThdCreateFromHeap(NULL, TEST_WA_SIZE, chThdGetPriorityX(),
-                           TestThread, chp);
-  if (tp == NULL) {
-    chprintf(chp, "out of memory\r\n");
-    return;
-  }
-  chThdWait(tp);
-}
-
-static const ShellCommand commands[] = {
-  {"mem", cmd_mem},
-  {"threads", cmd_threads},
-  {"test", cmd_test},
-  {NULL, NULL}
-};
-
-static const ShellConfig shell_cfg1 = {
-  (BaseSequentialStream *)&SDU1,
-  commands
-};
-
 /*===========================================================================*/
 /* Accelerometer related.                                                    */
 /*===========================================================================*/
@@ -194,31 +130,18 @@ static const SPIConfig spi1cfg = {
 };
 
 /*
- * SPI2 configuration structure.
- * Speed 21MHz, CPHA=0, CPOL=0, 8bits frames, MSb transmitted first.
- * The slave select line is the pin 12 on the port GPIOA.
- */
-static const SPIConfig spi2cfg = {
-  NULL,
-  /* HW dependent part.*/
-  GPIOB,
-  12,
-  0
-};
-
-/*
  * This is a periodic thread that reads accelerometer and outputs
  * result to SPI2 and PWM.
  */
 static THD_WORKING_AREA(waThread1, 128);
-static THD_FUNCTION(Thread1, arg) {
+static THD_FUNCTION(AccelThread, arg) {
   static int8_t xbuf[4], ybuf[4];   /* Last accelerometer data.*/
   systime_t time;                   /* Next deadline.*/
   /* Filip 17-06-2016 : for sending to Serial Driver */
-  BaseSequentialStream *chp = (BaseSequentialStream *)&SDU1;
+  // BaseSequentialStream *chp = (BaseSequentialStream *)&SDU1;
 
   (void)arg;
-  chRegSetThreadName("reader");
+  chRegSetThreadName("accelReader");
 
   /* LIS302DL initialization.*/
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1, 0x43);
@@ -242,10 +165,12 @@ static THD_FUNCTION(Thread1, arg) {
     ybuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
 
     /* Transmitting accelerometer the data over SPI2.*/
+    /* use this template to send over usb
     spiSelect(&SPID2);
     spiSend(&SPID2, 4, xbuf);
     spiSend(&SPID2, 4, ybuf);
     spiUnselect(&SPID2);
+    */
 
     /* Calculating average of the latest four accelerometer readings.*/
     x = ((int32_t)xbuf[0] + (int32_t)xbuf[1] +
@@ -254,7 +179,7 @@ static THD_FUNCTION(Thread1, arg) {
          (int32_t)ybuf[2] + (int32_t)ybuf[3]) / 4;
 
     /* Output the data to shell using SDU1 */
-    chprintf(chp, "Accelerometer data: x = %f, y = %f", x, y);
+    // chprintf(chp, "Accelerometer data: x = %f, y = %f", x, y);
 
     /* Reprogramming the four PWM channels using the accelerometer data.*/
     if (y < 0) {
@@ -287,7 +212,6 @@ static THD_FUNCTION(Thread1, arg) {
  * Application entry point.
  */
 int main(void) {
-  thread_t *shelltp = NULL;
 
   /*
    * System initializations.
@@ -299,70 +223,25 @@ int main(void) {
   halInit();
   chSysInit();
 
-  /*
-   * Shell manager initialization.
-   */
-  shellInit();
 
-  /*
-   * Initializes a serial-over-USB CDC driver.
-   */
-  sduObjectInit(&SDU1);
-  sduStart(&SDU1, &serusbcfg);
-
+#if FILIP_USB_RAW
   /*
    * Activates the USB driver and then the USB bus pull-up on D+.
    * Note, a delay is inserted in order to not have to disconnect the cable
    * after a reset.
    */
-  usbDisconnectBus(serusbcfg.usbp);
-  chThdSleepMilliseconds(1000);
-  usbStart(serusbcfg.usbp, &usbcfg);
-  usbConnectBus(serusbcfg.usbp);
-
-#if FILIP_USB_RAW
-  /*
-     * Activates the USB driver and then the USB bus pull-up on D+.
-     * Note, a delay is inserted in order to not have to disconnect the cable
-     * after a reset.
-     */
-    usbDisconnectBus(&USBD2);
-    chThdSleepMilliseconds(1500);
-    usbStart(&USBD2, &usbcfg);
-    usbConnectBus(&USBD2);
+  usbDisconnectBus(&USBD2);
+  chThdSleepMilliseconds(1500);
+  usbStart(&USBD2, &usbcfg);
+  usbConnectBus(&USBD2);
 
 #endif
-
-  /*
-   * Activates the serial driver 2 using the driver default configuration.
-   * PA2(TX) and PA3(RX) are routed to USART2.
-   */
-  sdStart(&SD2, NULL);
-  palSetPadMode(GPIOA, 2, PAL_MODE_ALTERNATE(7));
-  palSetPadMode(GPIOA, 3, PAL_MODE_ALTERNATE(7));
 
   /*
    * Initializes the SPI driver 1 in order to access the MEMS. The signals
    * are already initialized in the board file.
    */
   spiStart(&SPID1, &spi1cfg);
-
-  /*
-   * Initializes the SPI driver 2. The SPI2 signals are routed as follow:
-   * PB12 - NSS.
-   * PB13 - SCK.
-   * PB14 - MISO.
-   * PB15 - MOSI.
-   */
-  spiStart(&SPID2, &spi2cfg);
-  palSetPad(GPIOB, 12);
-  palSetPadMode(GPIOB, 12, PAL_MODE_OUTPUT_PUSHPULL |
-                           PAL_STM32_OSPEED_HIGHEST);           /* NSS.     */
-  palSetPadMode(GPIOB, 13, PAL_MODE_ALTERNATE(5) |
-                           PAL_STM32_OSPEED_HIGHEST);           /* SCK.     */
-  palSetPadMode(GPIOB, 14, PAL_MODE_ALTERNATE(5));              /* MISO.    */
-  palSetPadMode(GPIOB, 15, PAL_MODE_ALTERNATE(5) |
-                           PAL_STM32_OSPEED_HIGHEST);           /* MOSI.    */
 
   /*
    * Initializes the PWM driver 4, routes the TIM4 outputs to the board LEDs.
@@ -376,28 +255,19 @@ int main(void) {
   /*
    * Creates the example thread.
    */
-  chThdCreateStatic(waThread1, sizeof(waThread1),
-                    NORMALPRIO + 10, Thread1, NULL);
 
   /*
-   * Normal main() thread activity, in this demo it just performs
-   * a shell respawn upon its termination.
+   * Starting threads.
+   */
+  chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, AccelThread, NULL);
+  chThdCreateStatic(waWriter, sizeof(waWriter), NORMALPRIO, Writer, NULL);
+  chThdCreateStatic(waReader, sizeof(waReader), NORMALPRIO, Reader, NULL);
+
+
+  /*
+   * Normal main() thread activity
    */
   while (true) {
-    if (!shelltp) {
-      if (SDU1.config->usbp->state == USB_ACTIVE) {
-        /* Spawns a new shell.*/
-        shelltp = shellCreate(&shell_cfg1, SHELL_WA_SIZE, NORMALPRIO);
-      }
-    }
-    else {
-      /* If the previous shell exited.*/
-      if (chThdTerminatedX(shelltp)) {
-        /* Recovers memory of the previous shell.*/
-        chThdRelease(shelltp);
-        shelltp = NULL;
-      }
-    }
-    chThdSleepMilliseconds(500);
+    chThdSleepMilliseconds(1000);
   }
 }
