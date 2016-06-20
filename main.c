@@ -18,15 +18,13 @@
 #include "hal.h"
 #include "test.h"
 
-// #include "chprintf.h"
 #include "lis302dl.h"
 
 #include "usbcfg.h"
-#include "usb.h" // usbReceive / usbTransmit
+// #include "usb.h" // usbReceive / usbTransmit
 
 // defined in usbcfg.h:
 // #define FILIP_USB_RAW 1
-// TODO: set CH_DBG_FILL_THREADS to TRUE // in chconf.h
 
 /*===========================================================================*/
 /* Command line related.                                                     */
