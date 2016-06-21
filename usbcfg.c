@@ -50,10 +50,10 @@ static const USBDescriptor vcom_device_descriptor = {
 #define INTERFACE1 1
 
 /* Configuration Descriptor tree for a CDC.*/
-static const uint8_t vcom_configuration_descriptor_data[67lol] = { // TODO: check number of bytes after setting up only 1 interface
+static const uint8_t vcom_configuration_descriptor_data[67] = { // TODO: check number of bytes after setting up only 1 interface
   /* Configuration Descriptor.*/
 
-  USB_DESC_CONFIGURATION(67lol,            /* wTotalLength.                    */
+  USB_DESC_CONFIGURATION(67,            /* wTotalLength.                    */
                          0x01,          /* bNumInterfaces.                  */
                          0x01,          /* bConfigurationValue.             */
                          0,             /* iConfiguration.                  */
@@ -103,7 +103,7 @@ static const uint8_t vcom_configuration_descriptor_data[67lol] = { // TODO: chec
                          0x03,          /* bmAttributes (Interrupt).        */
                          0x0008,        /* wMaxPacketSize.                  */
                          0xFF),         /* bInterval.                       */
-#else
+//#else INTERFACE1
   /* Interface Descriptor.*/
   USB_DESC_INTERFACE    (0x01,          /* bInterfaceNumber.                */
                          0x00,          /* bAlternateSetting.               */
@@ -161,12 +161,13 @@ static const uint8_t vcom_string1[] = {
  * Device Description string.
  */
 static const uint8_t vcom_string2[] = {
-  USB_DESC_BYTE(56),                    /* bLength.                         */
+  USB_DESC_BYTE(66),                    /* bLength.                         */
   USB_DESC_BYTE(USB_DESCRIPTOR_STRING), /* bDescriptorType.                 */
   'C', 0, 'h', 0, 'i', 0, 'b', 0, 'i', 0, 'O', 0, 'S', 0, '/', 0,
-  'R', 0, 'T', 0, ' ', 0, 'V', 0, 'i', 0, 'r', 0, 't', 0, 'u', 0,
-  'a', 0, 'l', 0, ' ', 0, 'C', 0, 'O', 0, 'M', 0, ' ', 0, 'P', 0,
-  'o', 0, 'r', 0, 't', 0
+  'R', 0, 'T', 0, ' ', 0, 'F', 0, 'i', 0, 'l', 0, 'i', 0, 'p', 0,
+  'U', 0, 'S', 0, 'B', 0, ' ', 0, 'A', 0, 'c', 0, 'c', 0, 'e', 0,
+  'l', 0, 'e', 0, 'r', 0, 'o', 0, 'm', 0, 'e', 0, 't', 0, 'e', 0,
+  'r', 0
 };
 
 /*
