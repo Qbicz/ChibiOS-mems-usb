@@ -47,7 +47,7 @@ static const USBDescriptor vcom_device_descriptor = {
   vcom_device_descriptor_data
 };
 
-#define INTERFACE1 1
+#define INTERFACE1 0
 
 /* Configuration Descriptor tree for a CDC.*/
 static const uint8_t vcom_configuration_descriptor_data[67] = { // TODO: check number of bytes after setting up only 1 interface
@@ -103,17 +103,14 @@ static const uint8_t vcom_configuration_descriptor_data[67] = { // TODO: check n
                          0x03,          /* bmAttributes (Interrupt).        */
                          0x0008,        /* wMaxPacketSize.                  */
                          0xFF),         /* bInterval.                       */
-//#else INTERFACE1
+#else INTERFACE1
   /* Interface Descriptor.*/
   USB_DESC_INTERFACE    (0x01,          /* bInterfaceNumber.                */
                          0x00,          /* bAlternateSetting.               */
                          0x02,          /* bNumEndpoints.                   */
-                         0x0A,          /* bInterfaceClass (Data Class
-                                           Interface, CDC section 4.5).     */
-                         0x00,          /* bInterfaceSubClass (CDC section
-                                           4.6).                            */
-                         0x00,          /* bInterfaceProtocol (CDC section
-                                           4.7).                            */
+                         0xFF,          /* bInterfaceClass                  */
+                         0x00,          /* bInterfaceSubClass               */
+                         0x00,          /* bInterfaceProtocol               */
                          0x00),         /* iInterface.                      */
   /* Endpoint 3 Descriptor.*/
   USB_DESC_ENDPOINT     (USBD1_DATA_AVAILABLE_EP,       /* bEndpointAddress.*/
@@ -161,7 +158,7 @@ static const uint8_t vcom_string1[] = {
  * Device Description string.
  */
 static const uint8_t vcom_string2[] = {
-  USB_DESC_BYTE(66),                    /* bLength.                         */
+  USB_DESC_BYTE(68),                    /* bLength.                         */
   USB_DESC_BYTE(USB_DESCRIPTOR_STRING), /* bDescriptorType.                 */
   'C', 0, 'h', 0, 'i', 0, 'b', 0, 'i', 0, 'O', 0, 'S', 0, '/', 0,
   'R', 0, 'T', 0, ' ', 0, 'F', 0, 'i', 0, 'l', 0, 'i', 0, 'p', 0,
