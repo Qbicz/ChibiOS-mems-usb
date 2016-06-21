@@ -21,7 +21,6 @@
 #include "lis302dl.h"
 
 #include "usbcfg.h"
-// #include "usb.h" // usbReceive / usbTransmit
 
 // defined in usbcfg.h:
 // #define FILIP_USB_RAW 1
@@ -64,7 +63,7 @@ static THD_FUNCTION(Writer, arg) {
   (void)arg;
   chRegSetThreadName("writer");
   while (true) {
-    msg_t msg = usbTransmit(&USBD2, USBD2_DATA_REQUEST_EP,
+    msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
                             txbuf, sizeof (txbuf) - 1);
     if (msg == MSG_RESET)
       chThdSleepMilliseconds(500);
@@ -82,7 +81,7 @@ static THD_FUNCTION(Reader, arg) {
   (void)arg;
   chRegSetThreadName("reader");
   while (true) {
-    msg_t msg = usbReceive(&USBD2, USBD2_DATA_AVAILABLE_EP,
+    msg_t msg = usbReceive(&USBD1, USBD1_DATA_AVAILABLE_EP,
                            rxbuf, sizeof (rxbuf) - 1);
     if (msg == MSG_RESET)
       chThdSleepMilliseconds(500);
@@ -228,10 +227,10 @@ int main(void) {
    * Note, a delay is inserted in order to not have to disconnect the cable
    * after a reset.
    */
-  usbDisconnectBus(&USBD2);
+  usbDisconnectBus(&USBD1);
   chThdSleepMilliseconds(1500);
-  usbStart(&USBD2, &usbcfg);
-  usbConnectBus(&USBD2);
+  usbStart(&USBD1, &usbcfg);
+  usbConnectBus(&USBD1);
 
 #endif
 

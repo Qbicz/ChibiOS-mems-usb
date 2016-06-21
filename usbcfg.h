@@ -20,9 +20,9 @@
 #define FILIP_USB_RAW 1
 
 #if FILIP_USB_RAW
-  #define USBD2_DATA_REQUEST_EP           1
-  #define USBD2_DATA_AVAILABLE_EP         1
-  #define USBD2_INTERRUPT_REQUEST_EP      2
+  #define USBD1_DATA_REQUEST_EP           1
+  #define USBD1_DATA_AVAILABLE_EP         1
+  #define USBD1_INTERRUPT_REQUEST_EP      2
 
   extern const USBConfig usbcfg;
 

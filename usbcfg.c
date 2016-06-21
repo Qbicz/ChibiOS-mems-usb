@@ -18,12 +18,15 @@
 #include "usb_cdc.h"
 #include "usbcfg.h"
 
+/* Descriptors:
+ * http://www.beyondlogic.org/usbnutshell/usb5.shtml */
+
 /*
  * USB Device Descriptor.
  */
 static const uint8_t vcom_device_descriptor_data[18] = {
   USB_DESC_DEVICE       (0x0200,        /* bcdUSB (2.0).                    */
-                         0x02,          /* bDeviceClass (CDC).              */
+                         0xFF,          /* bDeviceClass (vendor specified). */
                          0x00,          /* bDeviceSubClass.                 */
                          0x00,          /* bDeviceProtocol.                 */
                          0x40,          /* bMaxPacketSize.                  */
@@ -44,22 +47,24 @@ static const USBDescriptor vcom_device_descriptor = {
   vcom_device_descriptor_data
 };
 
+#define INTERFACE1 1
+
 /* Configuration Descriptor tree for a CDC.*/
-static const uint8_t vcom_configuration_descriptor_data[67] = {
+static const uint8_t vcom_configuration_descriptor_data[67lol] = { // TODO: check number of bytes after setting up only 1 interface
   /* Configuration Descriptor.*/
-  USB_DESC_CONFIGURATION(67,            /* wTotalLength.                    */
-                         0x02,          /* bNumInterfaces.                  */
+
+  USB_DESC_CONFIGURATION(67lol,            /* wTotalLength.                    */
+                         0x01,          /* bNumInterfaces.                  */
                          0x01,          /* bConfigurationValue.             */
                          0,             /* iConfiguration.                  */
                          0xC0,          /* bmAttributes (self powered).     */
                          50),           /* bMaxPower (100mA).               */
+#if INTERFACE1
   /* Interface Descriptor.*/
   USB_DESC_INTERFACE    (0x00,          /* bInterfaceNumber.                */
                          0x00,          /* bAlternateSetting.               */
                          0x01,          /* bNumEndpoints.                   */
-                         0x02,          /* bInterfaceClass (Communications
-                                           Interface Class, CDC section
-                                           4.2).                            */
+                         0xFF,          /* bInterfaceClass                  */
                          0x02,          /* bInterfaceSubClass (Abstract
                                          Control Model, CDC section 4.3).   */
                          0x01,          /* bInterfaceProtocol (AT commands,
@@ -94,10 +99,11 @@ static const uint8_t vcom_configuration_descriptor_data[67] = {
   USB_DESC_BYTE         (0x01),         /* bSlaveInterface0 (Data Class
                                            Interface).                      */
   /* Endpoint 2 Descriptor.*/
-  USB_DESC_ENDPOINT     (USBD2_INTERRUPT_REQUEST_EP|0x80,
+  USB_DESC_ENDPOINT     (USBD1_INTERRUPT_REQUEST_EP|0x80,
                          0x03,          /* bmAttributes (Interrupt).        */
                          0x0008,        /* wMaxPacketSize.                  */
                          0xFF),         /* bInterval.                       */
+#else
   /* Interface Descriptor.*/
   USB_DESC_INTERFACE    (0x01,          /* bInterfaceNumber.                */
                          0x00,          /* bAlternateSetting.               */
@@ -110,16 +116,18 @@ static const uint8_t vcom_configuration_descriptor_data[67] = {
                                            4.7).                            */
                          0x00),         /* iInterface.                      */
   /* Endpoint 3 Descriptor.*/
-  USB_DESC_ENDPOINT     (USBD2_DATA_AVAILABLE_EP,       /* bEndpointAddress.*/
+  USB_DESC_ENDPOINT     (USBD1_DATA_AVAILABLE_EP,       /* bEndpointAddress.*/
                          0x02,          /* bmAttributes (Bulk).             */
                          0x0040,        /* wMaxPacketSize.                  */
                          0x00),         /* bInterval.                       */
   /* Endpoint 1 Descriptor.*/
-  USB_DESC_ENDPOINT     (USBD2_DATA_REQUEST_EP|0x80,    /* bEndpointAddress.*/
+  USB_DESC_ENDPOINT     (USBD1_DATA_REQUEST_EP|0x80,    /* bEndpointAddress.*/
                          0x02,          /* bmAttributes (Bulk).             */
                          0x0040,        /* wMaxPacketSize.                  */
                          0x00)          /* bInterval.                       */
+#endif // INTERFACE1
 };
+
 
 /*
  * Configuration Descriptor wrapper.
@@ -268,8 +276,8 @@ static void usb_event(USBDriver *usbp, usbevent_t event) {
     /* Enables the endpoints specified into the configuration.
        Note, this callback is invoked from an ISR so I-Class functions
        must be used.*/
-    usbInitEndpointI(usbp, USBD2_DATA_REQUEST_EP, &ep1config);
-    usbInitEndpointI(usbp, USBD2_INTERRUPT_REQUEST_EP, &ep2config);
+    usbInitEndpointI(usbp, USBD1_DATA_REQUEST_EP, &ep1config);
+    usbInitEndpointI(usbp, USBD1_INTERRUPT_REQUEST_EP, &ep2config);
 
     chSysUnlockFromISR();
     return;
