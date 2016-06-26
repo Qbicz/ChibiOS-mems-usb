@@ -163,6 +163,7 @@ static THD_FUNCTION(AccelThread, arg) {
 
     /* Transmitting accelerometer the data over SPI2.*/
     /* use this template to send over usb
+     *
     spiSelect(&SPID2);
     spiSend(&SPID2, 4, xbuf);
     spiSend(&SPID2, 4, ybuf);
@@ -248,10 +249,6 @@ int main(void) {
   palSetPadMode(GPIOD, GPIOD_LED3, PAL_MODE_ALTERNATE(2));      /* Orange.  */
   palSetPadMode(GPIOD, GPIOD_LED5, PAL_MODE_ALTERNATE(2));      /* Red.     */
   palSetPadMode(GPIOD, GPIOD_LED6, PAL_MODE_ALTERNATE(2));      /* Blue.    */
-
-  /*
-   * Creates the example thread.
-   */
 
   /*
    * Starting threads.

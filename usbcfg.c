@@ -49,11 +49,10 @@ static const USBDescriptor vcom_device_descriptor = {
 
 #define INTERFACE1 0
 
-/* Configuration Descriptor tree for a CDC.*/
-static const uint8_t vcom_configuration_descriptor_data[67] = { // TODO: check number of bytes after setting up only 1 interface
-  /* Configuration Descriptor.*/
-
-  USB_DESC_CONFIGURATION(67,            /* wTotalLength.                    */
+/* Configuration Descriptor tree */
+static const uint8_t vcom_configuration_descriptor_data[32] = { // 32 bytes - only 1 interface
+  /* Configuration Descriptor. 9 byte macro */
+  USB_DESC_CONFIGURATION(32,            /* wTotalLength.                    */
                          0x01,          /* bNumInterfaces.                  */
                          0x01,          /* bConfigurationValue.             */
                          0,             /* iConfiguration.                  */
@@ -104,7 +103,7 @@ static const uint8_t vcom_configuration_descriptor_data[67] = { // TODO: check n
                          0x0008,        /* wMaxPacketSize.                  */
                          0xFF),         /* bInterval.                       */
 #else INTERFACE1
-  /* Interface Descriptor.*/
+  /* Interface Descriptor. 9 byte macro */
   USB_DESC_INTERFACE    (0x01,          /* bInterfaceNumber.                */
                          0x00,          /* bAlternateSetting.               */
                          0x02,          /* bNumEndpoints.                   */
@@ -112,7 +111,7 @@ static const uint8_t vcom_configuration_descriptor_data[67] = { // TODO: check n
                          0x00,          /* bInterfaceSubClass               */
                          0x00,          /* bInterfaceProtocol               */
                          0x00),         /* iInterface.                      */
-  /* Endpoint 3 Descriptor.*/
+  /* Endpoint 3 Descriptor. 7 byte macro */
   USB_DESC_ENDPOINT     (USBD1_DATA_AVAILABLE_EP,       /* bEndpointAddress.*/
                          0x02,          /* bmAttributes (Bulk).             */
                          0x0040,        /* wMaxPacketSize.                  */
