@@ -2,15 +2,10 @@
 
 import usb.core
 import usb.util
+import sys
 
 # find our device - Vendor ST, Product STM32F4
-# dev = usb.core.find(idVendor=0x0483, idProduct=0x5740)
-
-dev = usb.core.find(find_all=True)
-
-# was it found?
-#if usb.core.find(bDeviceClass=2) is None:
-#    raise ValueError('No CDC found')
+dev = usb.core.find(idVendor=0x0483, idProduct=0xBABE)
 
 if dev is None:
     raise ValueError('Device not found')
@@ -19,19 +14,24 @@ if dev is None:
 # configuration will be the active one
 dev.set_configuration()
 
-# get an endpoint instance
 cfg = dev.get_active_configuration()
 intf = cfg[(0,0)]
 
 ep = usb.util.find_descriptor(
     intf,
-    # match the first OUT endpoint
+    #match the first OUT endpoint
     custom_match = \
     lambda e: \
         usb.util.endpoint_direction(e.bEndpointAddress) == \
-        usb.util.ENDPOINT_OUT)
+        usb.util.ENDPOINT_IN)
 
 assert ep is not None
+print(ep)
 
-# write the data
-ep.write('test')
+# not using ep yet
+size = 1024
+#timeout = 
+usbData = dev.read(0x81, size)
+
+#usbData = ep.read()
+print(usbData)

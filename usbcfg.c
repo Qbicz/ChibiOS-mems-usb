@@ -102,7 +102,7 @@ static const uint8_t vcom_configuration_descriptor_data[32] = { // 32 bytes - on
                          0x03,          /* bmAttributes (Interrupt).        */
                          0x0008,        /* wMaxPacketSize.                  */
                          0xFF),         /* bInterval.                       */
-#else INTERFACE1
+#else
   /* Interface Descriptor. 9 byte macro */
   USB_DESC_INTERFACE    (0x01,          /* bInterfaceNumber.                */
                          0x00,          /* bAlternateSetting.               */
