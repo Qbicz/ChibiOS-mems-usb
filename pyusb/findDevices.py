@@ -8,4 +8,5 @@ dev = usb.core.find(find_all=True)
 # formatted device list
 for device in dev:
     print(device)
-  
+
+# read data from endpoint

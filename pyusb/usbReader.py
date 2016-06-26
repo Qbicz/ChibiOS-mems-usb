@@ -6,15 +6,7 @@ import usb.util
 # find our device - Vendor ST, Product STM32F4
 # dev = usb.core.find(idVendor=0x0483, idProduct=0x5740)
 
-
-
-printers = usb.core.find(find_all=True, bDeviceClass=7)
-
-# Python 2, Python 3, to be or not to be
-import sys
-sys.stdout.write('There are ' + len(printers) + ' in the system\n.')
-
-
+dev = usb.core.find(find_all=True)
 
 # was it found?
 #if usb.core.find(bDeviceClass=2) is None:
