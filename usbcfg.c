@@ -31,7 +31,7 @@ static const uint8_t vcom_device_descriptor_data[18] = {
                          0x00,          /* bDeviceProtocol.                 */
                          0x40,          /* bMaxPacketSize.                  */
                          0x0483,        /* idVendor (ST).                   */
-                         0x5740,        /* idProduct.                       */
+                         0xBABE,        /* idProduct.                       */
                          0x0200,        /* bcdDevice.                       */
                          1,             /* iManufacturer.                   */
                          2,             /* iProduct.                        */
@@ -157,13 +157,13 @@ static const uint8_t vcom_string1[] = {
  * Device Description string.
  */
 static const uint8_t vcom_string2[] = {
-  USB_DESC_BYTE(68),                    /* bLength.                         */
+  USB_DESC_BYTE(70),                    /* bLength.                         */
   USB_DESC_BYTE(USB_DESCRIPTOR_STRING), /* bDescriptorType.                 */
   'C', 0, 'h', 0, 'i', 0, 'b', 0, 'i', 0, 'O', 0, 'S', 0, '/', 0,
   'R', 0, 'T', 0, ' ', 0, 'F', 0, 'i', 0, 'l', 0, 'i', 0, 'p', 0,
   'U', 0, 'S', 0, 'B', 0, ' ', 0, 'A', 0, 'c', 0, 'c', 0, 'e', 0,
   'l', 0, 'e', 0, 'r', 0, 'o', 0, 'm', 0, 'e', 0, 't', 0, 'e', 0,
-  'r', 0
+  'r', 0, ' ', 0, '2', 0
 };
 
 /*
