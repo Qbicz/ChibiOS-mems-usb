@@ -55,6 +55,11 @@ class UsbLivePlot:
         self.ax1.plot(self.timear, self.xar)
         self.ax2.plot(self.timear, self.yar)
         
+        self.ax1.set_title('Acceleration from STM32F4Discovery')
+        self.ax2.set_xlabel('Time [s]')
+        self.ax1.set_ylabel('x-axis acceleration')
+        self.ax2.set_ylabel('y-axis acceleration')
+        
         
     def findEndpoint(self):
         cfg = self.usbDev.get_active_configuration()
