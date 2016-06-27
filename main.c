@@ -22,16 +22,11 @@
 
 #include "usbcfg.h"
 
-// defined in usbcfg.h:
-// #define FILIP_USB_RAW 1
-
 /*===========================================================================*/
 /* Command line related.                                                     */
 /*===========================================================================*/
 
 #define TEST_WA_SIZE    THD_WORKING_AREA_SIZE(256)
-
-#if FILIP_USB_RAW
 
 /* Accel data - common for all threads, only modified in AccelThread */
 static int32_t x, y;
@@ -80,7 +75,6 @@ static THD_FUNCTION(Reader, arg) {
       chThdSleepMilliseconds(50);
   }
 }
-#endif
 
 /*===========================================================================*/
 /* Accelerometer related.                                                    */
@@ -201,8 +195,6 @@ int main(void) {
   halInit();
   chSysInit();
 
-
-#if FILIP_USB_RAW
   /*
    * Activates the USB driver and then the USB bus pull-up on D+.
    * Note, a delay is inserted in order to not have to disconnect the cable
@@ -212,8 +204,6 @@ int main(void) {
   chThdSleepMilliseconds(1500);
   usbStart(&USBD1, &usbcfg);
   usbConnectBus(&USBD1);
-
-#endif
 
   /*
    * Initializes the SPI driver 1 in order to access the MEMS. The signals

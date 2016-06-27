@@ -17,16 +17,11 @@
 #ifndef _USBCFG_H_
 #define _USBCFG_H_
 
-#define FILIP_USB_RAW 1
+#define USBD1_DATA_REQUEST_EP           1
+#define USBD1_DATA_AVAILABLE_EP         1
+#define USBD1_INTERRUPT_REQUEST_EP      2
 
-#if FILIP_USB_RAW
-  #define USBD1_DATA_REQUEST_EP           1
-  #define USBD1_DATA_AVAILABLE_EP         1
-  #define USBD1_INTERRUPT_REQUEST_EP      2
-
-  extern const USBConfig usbcfg;
-
-#endif
+extern const USBConfig usbcfg;
 
 #endif  /* _USBCFG_H_ */
 
