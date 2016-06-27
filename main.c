@@ -34,7 +34,7 @@
 #if FILIP_USB_RAW
 
 /* Accel data - common for all threads, only modified in AccelThread */
-static int8_t xbuf[4], ybuf[4];
+static int32_t x, y;
 // TODO: use Chibi Mailboxes instead
 
 static uint8_t rxbuf[1024];
@@ -52,8 +52,8 @@ static THD_FUNCTION(Writer, arg) {
   while (true) {
     /* Concatenate accelerometer data */
     uint8_t xybuf[8];
-    memcpy(xybuf    , xbuf, 4*sizeof(xbuf[0]));
-    memcpy(xybuf+4  , ybuf, 4*sizeof(ybuf[0]));
+    memcpy(xybuf            , &x, sizeof(x));
+    memcpy(xybuf+sizeof(x)  , &y, sizeof(y));
 
     msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
                             xybuf, 8);
@@ -125,22 +125,21 @@ static const SPIConfig spi1cfg = {
  */
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(AccelThread, arg) {
-  //static int8_t xbuf[4], ybuf[4];   /* Last accelerometer data.*/
+  static int8_t xbuf[4], ybuf[4];   /* Last accelerometer data.*/
   systime_t time;                   /* Next deadline.*/
 
   (void)arg;
   chRegSetThreadName("accelReader");
 
-  /* LIS302DL initialization.*/
-  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1, 0x43);
+  /* LIS302DL initialization. */
+  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1, 0xC3); /* 0xC3 for 400Hz rate, 0x43 for 100Hz */
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG2, 0x00);
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG3, 0x00);
-  // TODO: set lis302 to maximum frequency
 
   /* Reader thread loop.*/
   time = chVTGetSystemTime();
   while (true) {
-    int32_t x, y;
+    //int32_t x, y;
     unsigned i;
 
     /* Keeping an history of the latest four accelerometer readings.*/

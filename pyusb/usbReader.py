@@ -2,7 +2,14 @@
 
 import usb.core
 import usb.util
-import sys
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+import time
+
+# create figure with two subplots
+fig = plt.figure()
+ax1 = fig.add_subplot(2,1,1)
+ax2 = fig.add_subplot(2,1,2)
 
 # find our device - Vendor ST, Product STM32F4
 dev = usb.core.find(idVendor=0x0483, idProduct=0xBABE)
@@ -36,8 +43,13 @@ usbData = dev.read(0x81, size)
 #usbData = ep.read()
 print(usbData)
 
-x = usbData[0:4]
-y = usbData[4:8]
+xbytes = usbData[0:4]
+ybytes = usbData[4:8]
+
+x = int.from_bytes(xbytes, byteorder='little', signed='false')
+y = int.from_bytes(ybytes, byteorder='little', signed='false')
+
+# TODO: add reading z axis and convert to degrees
 
 print(x)
 print(y)
