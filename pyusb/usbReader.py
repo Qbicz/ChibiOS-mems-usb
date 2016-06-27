@@ -29,9 +29,16 @@ assert ep is not None
 print(ep)
 
 # not using ep yet
-size = 1024
+size = 8
 #timeout = 
 usbData = dev.read(0x81, size)
 
 #usbData = ep.read()
 print(usbData)
+
+x = usbData[0:4]
+y = usbData[4:8]
+
+print(x)
+print(y)
+

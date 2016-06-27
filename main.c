@@ -32,23 +32,10 @@
 #define TEST_WA_SIZE    THD_WORKING_AREA_SIZE(256)
 
 #if FILIP_USB_RAW
-  static const uint8_t txbuf[] =
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+/* Accel data - common for all threads, only modified in AccelThread */
+static int8_t xbuf[4], ybuf[4];
+// TODO: use Chibi Mailboxes instead
 
 static uint8_t rxbuf[1024];
 
@@ -63,10 +50,16 @@ static THD_FUNCTION(Writer, arg) {
   (void)arg;
   chRegSetThreadName("writer");
   while (true) {
+    /* Concatenate accelerometer data */
+    uint8_t xybuf[8];
+    memcpy(xybuf    , xbuf, 4*sizeof(xbuf[0]));
+    memcpy(xybuf+4  , ybuf, 4*sizeof(ybuf[0]));
+
     msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
-                            txbuf, sizeof (txbuf) - 1);
+                            xybuf, 8);
+                            //txbuf, sizeof (txbuf) - 1);
     if (msg == MSG_RESET)
-      chThdSleepMilliseconds(500);
+      chThdSleepMilliseconds(50);
   }
 }
 
@@ -84,7 +77,7 @@ static THD_FUNCTION(Reader, arg) {
     msg_t msg = usbReceive(&USBD1, USBD1_DATA_AVAILABLE_EP,
                            rxbuf, sizeof (rxbuf) - 1);
     if (msg == MSG_RESET)
-      chThdSleepMilliseconds(500);
+      chThdSleepMilliseconds(50);
   }
 }
 #endif
@@ -132,10 +125,8 @@ static const SPIConfig spi1cfg = {
  */
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(AccelThread, arg) {
-  static int8_t xbuf[4], ybuf[4];   /* Last accelerometer data.*/
+  //static int8_t xbuf[4], ybuf[4];   /* Last accelerometer data.*/
   systime_t time;                   /* Next deadline.*/
-  /* Filip 17-06-2016 : for sending to Serial Driver */
-  // BaseSequentialStream *chp = (BaseSequentialStream *)&SDU1;
 
   (void)arg;
   chRegSetThreadName("accelReader");
@@ -144,6 +135,7 @@ static THD_FUNCTION(AccelThread, arg) {
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1, 0x43);
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG2, 0x00);
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG3, 0x00);
+  // TODO: set lis302 to maximum frequency
 
   /* Reader thread loop.*/
   time = chVTGetSystemTime();
@@ -161,23 +153,11 @@ static THD_FUNCTION(AccelThread, arg) {
     xbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
     ybuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
 
-    /* Transmitting accelerometer the data over SPI2.*/
-    /* use this template to send over usb
-     *
-    spiSelect(&SPID2);
-    spiSend(&SPID2, 4, xbuf);
-    spiSend(&SPID2, 4, ybuf);
-    spiUnselect(&SPID2);
-    */
-
     /* Calculating average of the latest four accelerometer readings.*/
     x = ((int32_t)xbuf[0] + (int32_t)xbuf[1] +
          (int32_t)xbuf[2] + (int32_t)xbuf[3]) / 4;
     y = ((int32_t)ybuf[0] + (int32_t)ybuf[1] +
          (int32_t)ybuf[2] + (int32_t)ybuf[3]) / 4;
-
-    /* Output the data to shell using SDU1 */
-    // chprintf(chp, "Accelerometer data: x = %f, y = %f", x, y);
 
     /* Reprogramming the four PWM channels using the accelerometer data.*/
     if (y < 0) {
@@ -197,6 +177,7 @@ static THD_FUNCTION(AccelThread, arg) {
       pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
     }
 
+    // TODO: update time interval
     /* Waiting until the next 250 milliseconds time interval.*/
     chThdSleepUntil(time += MS2ST(100));
   }
@@ -262,6 +243,6 @@ int main(void) {
    * Normal main() thread activity
    */
   while (true) {
-    chThdSleepMilliseconds(1000);
+    chThdSleepMilliseconds(100);
   }
 }
