@@ -6,51 +6,84 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import time
 
-# create figure with two subplots
-fig = plt.figure()
-ax1 = fig.add_subplot(2,1,1)
-ax2 = fig.add_subplot(2,1,2)
+class UsbLivePlot:
 
-# find our device - Vendor ST, Product STM32F4
-dev = usb.core.find(idVendor=0x0483, idProduct=0xBABE)
+    def __init__(self):
+    
+        # find our device - Vendor ST, Product STM32F4
+        self.usbDev = usb.core.find(idVendor=0x0483, idProduct=0xBABE)
+        if self.usbDev is None:
+            raise ValueError('Device not found')
+            
+        # With no arguments, the first configuration will be the active one
+        self.usbDev.set_configuration()
+            
+        # create figure with two subplots
+        self.fig = plt.figure()
+        self.ax1 = self.fig.add_subplot(2,1,1)
+        self.ax2 = self.fig.add_subplot(2,1,2)
+        self.startTime = time.time()
+        
+        # create buffers
+        self.timear = []
+        self.xar = []
+        self.yar = []
+        
 
-if dev is None:
-    raise ValueError('Device not found')
+    def xyFromUsb(self, usbData):
+        xbytes = usbData[0:4]
+        ybytes = usbData[4:8]
 
-# set the active configuration. With no arguments, the first
-# configuration will be the active one
-dev.set_configuration()
+        x = int.from_bytes(xbytes, byteorder='little', signed='false')
+        y = int.from_bytes(ybytes, byteorder='little', signed='false')
+        return x,y
+        
 
-cfg = dev.get_active_configuration()
-intf = cfg[(0,0)]
+    def animate(self, i):
+        
+        # USB read
+        usbData = self.usbDev.read(0x81, 8)
+        x,y = self.xyFromUsb(usbData)
+        t = time.time() - self.startTime
+        
+        self.timear.append(float(t))
+        self.xar.append(float(x))
+        self.yar.append(float(y))
+               
+        self.ax1.clear()
+        self.ax2.clear()
+        self.ax1.plot(self.timear, self.xar)
+        self.ax2.plot(self.timear, self.yar)
+        
+        
+    def findEndpoint(self):
+        cfg = self.usbDev.get_active_configuration()
+        intf = cfg[(0,0)]
 
-ep = usb.util.find_descriptor(
-    intf,
-    #match the first OUT endpoint
-    custom_match = \
-    lambda e: \
-        usb.util.endpoint_direction(e.bEndpointAddress) == \
-        usb.util.ENDPOINT_IN)
+        ep = usb.util.find_descriptor(
+            intf,
+            #match the first OUT endpoint
+            custom_match = \
+            lambda e: \
+                usb.util.endpoint_direction(e.bEndpointAddress) == \
+                usb.util.ENDPOINT_IN)
 
-assert ep is not None
-print(ep)
+        assert ep is not None
+        print(ep)
+        
+    
+def main():
+    
+    usbLive = UsbLivePlot()
 
-# not using ep yet
-size = 8
-#timeout = 
-usbData = dev.read(0x81, size)
+    # TODO: add reading z axis and convert to degrees
 
-#usbData = ep.read()
-print(usbData)
 
-xbytes = usbData[0:4]
-ybytes = usbData[4:8]
+    # Create a self-updating plot
+    ani = animation.FuncAnimation(usbLive.fig, usbLive.animate, interval = 50)
+    plt.title('STM32F4 Discovery accelerometers')
+    plt.show()
+    
 
-x = int.from_bytes(xbytes, byteorder='little', signed='false')
-y = int.from_bytes(ybytes, byteorder='little', signed='false')
-
-# TODO: add reading z axis and convert to degrees
-
-print(x)
-print(y)
-
+if __name__ == '__main__':
+    main()
