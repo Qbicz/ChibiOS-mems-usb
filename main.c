@@ -35,9 +35,7 @@ static int32_t x, y;
 static uint8_t rxbuf[1024];
 
 /*
- * USB writer. This thread writes data to the USB at maximum rate.
- * Can be measured using:
- *   dd if=/dev/xxxx of=/dev/null bs=512 count=10000
+ * USB writer. This thread writes accelerometer data to the USB at maximum rate.
  */
 static THD_WORKING_AREA(waWriter, 128);
 static THD_FUNCTION(Writer, arg) {
@@ -126,6 +124,7 @@ static THD_FUNCTION(AccelThread, arg) {
   chRegSetThreadName("accelReader");
 
   /* LIS302DL initialization. */
+  // TODO: activate Z axis and send it as well
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1, 0xC3); /* 0xC3 for 400Hz rate, 0x43 for 100Hz */
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG2, 0x00);
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG3, 0x00);
