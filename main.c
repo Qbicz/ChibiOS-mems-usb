@@ -148,6 +148,12 @@ static THD_FUNCTION(AccelThread, arg) {
   /* Initiate IRQ */
   // nvicEnableVector(SPI1_IRQn, CORTEX_PRIO_MASK(1));
 
+  /* LIS302DL initialization. */
+  // TODO: activate Z axis and send it as well
+  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1, 0xC3); /* 0xC3 for 400Hz rate, 0x43 for 100Hz */
+  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG2, 0x00);
+  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG3, 0x00);
+
   /* Reader thread loop.*/
   time = chVTGetSystemTime();
   while (true) {
