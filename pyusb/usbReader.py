@@ -36,6 +36,10 @@ class UsbLivePlot:
 
         x = int.from_bytes(xbytes, byteorder='little', signed='false')
         y = int.from_bytes(ybytes, byteorder='little', signed='false')
+        
+        # TODO: Scale to G (full res is 2G)
+        # 1G for ~53
+        
         return x,y
         
 
@@ -76,6 +80,9 @@ class UsbLivePlot:
         assert ep is not None
         print(ep)
         
+    def logToFile(self, filename):
+        pass
+        # TODO: use usb logger or simply put data to file
     
 def main():
     
