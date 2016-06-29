@@ -62,7 +62,7 @@
  * @brief   Enables the EXT subsystem.
  */
 #if !defined(HAL_USE_EXT) || defined(__DOXYGEN__)
-#define HAL_USE_EXT                 FALSE
+#define HAL_USE_EXT                 FALSE // TODO: use PE0 or PE1 for LIS302DL
 #endif
 
 /**
