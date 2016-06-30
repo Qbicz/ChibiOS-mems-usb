@@ -30,13 +30,13 @@
 
 /* Accelerometer configuration bits - not included in lis302dl.h */
 #define LIS302DL_STATUS_XYZ_READY   0x08
-#define LIS302DL_CTRL_XY_EN         0x03
+#define LIS302DL_CTRL_XYZ_EN         0x07
 #define LIS302DL_CTRL_POWER         0x40
 #define LIS302DL_CTRL_400HZ         0x80
 #define LIS302DL_CTRL_DATAREADY1    0x40
 
 /* Accel data - common for all threads, only modified in AccelThread */
-static int32_t x, y;
+static int32_t x, y, z;
 // TODO: use Chibi Mailboxes instead
 
 static uint8_t rxbuf[1024];
@@ -56,7 +56,7 @@ static THD_FUNCTION(Writer, arg) {
     uint8_t xyzbuf[12];
     memcpy(xyzbuf                       , &x, sizeof(x));
     memcpy(xyzbuf+sizeof(x)             , &y, sizeof(y));
-    //memcpy(xyzbuf+sizeof(x)+sizeof(y)   , &z, sizeof(z));
+    memcpy(xyzbuf+sizeof(x)+sizeof(y)   , &z, sizeof(z));
 
     // TODO: USB interrupts
     msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
@@ -128,8 +128,8 @@ static const SPIConfig spi1cfg = {
  */
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(AccelThread, arg) {
-  static int8_t xbuf[4], ybuf[4];   /* Last accelerometer data.*/
-  systime_t time;                   /* Next deadline.*/
+  static int8_t xbuf[4], ybuf[4], zbuf[4];  /* Last accelerometer data.*/
+  systime_t time;                           /* Next deadline.*/
 
   /* LIS302DL initialization: X,Y,Z axes with 400Hz rate */
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1,
@@ -145,7 +145,7 @@ static THD_FUNCTION(AccelThread, arg) {
   (void)arg;
   chRegSetThreadName("accelReader");
   //tp_accel = chThdGetSelfX();
-  /* Initiate IRQ */
+  /* Initiate IRQ */ // EXTI!
   // nvicEnableVector(SPI1_IRQn, CORTEX_PRIO_MASK(1));
 
   /* LIS302DL initialization. */
@@ -166,21 +166,21 @@ static THD_FUNCTION(AccelThread, arg) {
     for (i = 3; i > 0; i--) {
       xbuf[i] = xbuf[i - 1];
       ybuf[i] = ybuf[i - 1];
-      //zbuf[i] = zbuf[i - 1];
+      zbuf[i] = zbuf[i - 1];
     }
 
     /* Reading MEMS accelerometer X, Y and Z registers.*/
     xbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
     ybuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
-    //zbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
+    zbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
 
     /* Calculating average of the latest four accelerometer readings.*/
     x = ((int32_t)xbuf[0] + (int32_t)xbuf[1] +
          (int32_t)xbuf[2] + (int32_t)xbuf[3]) / 4;
     y = ((int32_t)ybuf[0] + (int32_t)ybuf[1] +
          (int32_t)ybuf[2] + (int32_t)ybuf[3]) / 4;
-    //z = ((int32_t)zbuf[0] + (int32_t)zbuf[1] +
-    //     (int32_t)zbuf[2] + (int32_t)zbuf[3]) / 4;
+    z = ((int32_t)zbuf[0] + (int32_t)zbuf[1] +
+         (int32_t)zbuf[2] + (int32_t)zbuf[3]) / 4;
 
     /* Reprogramming the four PWM channels using the accelerometer data.*/
     if (y < 0) {
@@ -192,11 +192,11 @@ static THD_FUNCTION(AccelThread, arg) {
       pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)0);
     }
     if (x < 0) {
-      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)-x);
+      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)-z);
       pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)0);
     }
     else {
-      pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)x);
+      pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)z);
       pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
     }
 

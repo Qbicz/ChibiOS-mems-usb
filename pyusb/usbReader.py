@@ -37,7 +37,7 @@ class UsbLivePlot:
     def xyFromUsb(self, usbData):
         xbytes = usbData[0:4]
         ybytes = usbData[4:8]
-        zbytes = usbData[9:12]
+        zbytes = usbData[8:12]
         # TODO: change magic numbers to well-named sizes
 
         x = int.from_bytes(xbytes, byteorder='little', signed='false')
