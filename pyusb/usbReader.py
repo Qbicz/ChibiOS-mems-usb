@@ -28,6 +28,7 @@ class UsbLivePlot:
         # TODO: add angles subplots on the right side of the window
         
         # create buffers
+        self.datasize = 1
         self.timear = []
         self.xar = []
         self.yar = []
@@ -35,9 +36,9 @@ class UsbLivePlot:
         
 
     def xyFromUsb(self, usbData):
-        xbytes = usbData[0:4]
-        ybytes = usbData[4:8]
-        zbytes = usbData[8:12]
+        xbytes = usbData[0              :self.datasize]
+        ybytes = usbData[self.datasize  :2*self.datasize]
+        zbytes = usbData[2*self.datasize:3*self.datasize]
         # TODO: change magic numbers to well-named sizes
 
         x = int.from_bytes(xbytes, byteorder='little', signed='false')
@@ -49,15 +50,15 @@ class UsbLivePlot:
     def animate(self, i):
         
         # USB read
-        usbData = self.usbDev.read(0x81, 12)
+        usbData = self.usbDev.read(0x81, 3*self.datasize)
         x,y,z = self.xyFromUsb(usbData)
         # TODO: timestamps should be created by MCU
         t = time.time() - self.startTime
         
         self.timear.append(float(t))
-        self.xar.append(float(x))
-        self.yar.append(float(y))
-        self.zar.append(float(z))
+        self.xar.append(int(x))
+        self.yar.append(int(y))
+        self.zar.append(int(z))
                
         self.ax1.clear()
         self.ax2.clear()
