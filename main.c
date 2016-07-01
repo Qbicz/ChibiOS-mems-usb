@@ -17,7 +17,7 @@
 #include "ch.h"
 #include "hal.h"
 #include "test.h"
-
+#include "ext_lld.h"
 #include "lis302dl.h"
 
 #include "usbcfg.h"
@@ -29,14 +29,21 @@
 #define LIS302DL_CTRL_400HZ         0x80
 #define LIS302DL_CTRL_DATAREADY1    0x40
 
+/* use synchronous (blocking) thread waking */
+#define SYNCHRONOUS
+//#undef SYNCHRONOUS
+
 /* Accel data - common for all threads, only modified in AccelThread */
 static int8_t x, y, z;
 // TODO: use Chibi Mailboxes instead
 
 static uint8_t rxbuf[8];
 
-static thread_t *tp_accel;
-
+#ifndef SYNCHRONOUS
+  static thread_t *tp_accel;
+#else
+  static thread_reference_t trp = NULL;
+#endif
 /*===========================================================================*/
 /* Accelerometer related.                                                    */
 /*===========================================================================*/
@@ -77,21 +84,24 @@ static const SPIConfig spi1cfg = {
 /*
  * External interrupt callback. It wakes accel thread
  */
-static void extcb1(EXTDriver *extp, expchannel_t channel)
+static void extCallback(EXTDriver *extp, expchannel_t channel)
 {
   (void)extp;
   (void)channel;
 
-  palSetPad(GPIOD, GPIOD_LED6); // Blue, Debug
-
   chSysLockFromISR();
+  /* Wake thread */
+#ifndef SYNCHRONOUS
   chEvtSignalI(tp_accel, (eventmask_t)1);
+#else
+  chThdResumeI(&trp, (msg_t)0xFEED);
+#endif
   chSysUnlockFromISR();
 }
 
 static const EXTConfig extcfg = {
   {
-    {EXT_CH_MODE_RISING_EDGE | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOE, extcb1},
+    {EXT_CH_MODE_RISING_EDGE | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOE, extCallback},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
@@ -117,6 +127,29 @@ static const EXTConfig extcfg = {
   }
 };
 
+/*
+ * Hardware interrupt which wakes accel thread
+ */
+// TODO: check STM32_OTG2_EP1OUT_HANDLER
+
+CH_IRQ_HANDLER(EXTI0_IRQHandler)
+{
+   CH_IRQ_PROLOGUE();
+
+   chSysLockFromISR();
+   /* Wake up thread */
+#ifndef SYNCHRONOUS
+   chEvtSignalI(tp_accel, (eventmask_t)1);
+#else
+  chThdResumeI(&trp, (msg_t)0xFEED);
+#endif
+   chSysUnlockFromISR();
+
+   // accel IRQ is reset by reading data
+
+   CH_IRQ_EPILOGUE();
+}
+
 /*===========================================================================*/
 /* Threads.                                                                  */
 /*===========================================================================*/
@@ -130,8 +163,6 @@ static THD_FUNCTION(Writer, arg) {
 
   (void)arg;
   chRegSetThreadName("writer");
-
-
 
   while (true) {
     /* Concatenate accelerometer data */
@@ -167,6 +198,7 @@ static THD_FUNCTION(Reader, arg) {
   }
 }
 
+
 /*
  * This is a periodic thread that reads accelerometer and outputs
  * result to PWM.
@@ -174,8 +206,9 @@ static THD_FUNCTION(Reader, arg) {
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(AccelThread, arg) {
   //static int8_t xbuf, ybuf, zbuf;  /* Last accelerometer data.*/
-  //systime_t time;                           /* Next deadline.*/
-
+#ifndef SYNCHRONOUS
+  systime_t time;                           /* Next deadline.*/
+#endif
   /*
    * LIS302DL initialization: X,Y,Z axes with 400Hz rate,
    * enable DataReady signal INT1 (PE0 pin) by setting I1CFG in CTRL_REG3 to "100"
@@ -185,32 +218,30 @@ static THD_FUNCTION(AccelThread, arg) {
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG2, 0x00);
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG3, LIS302DL_CTRL_DATAREADY1);
 
-  /* X,Y,Z Data ready */
-  // TODO: set up an interrupt when status xyz is set
-  //(LIS302DL_STATUS_REG, LIS302DL_STATUS_XYZ_READY);
-
   (void)arg;
   chRegSetThreadName("accelReader");
+#ifndef SYNCHRONOUS
   tp_accel = chThdGetSelfX();
-  /* Initiate IRQ */ // EXTI!
-  //nvicEnableVector(SPI1_IRQn, CORTEX_PRIO_MASK(1));
-
-  /* LIS302DL initialization. */
-  // TODO: activate Z axis and send it as well
-  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1, 0xC3); /* 0xC3 for 400Hz rate, 0x43 for 100Hz */
-  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG2, 0x00);
-  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG3, 0x00);
-
+#endif
   palSetPad(GPIOD, GPIOD_LED3); // Orange, Debug
 
   /* Reader thread loop.*/
   //time = chVTGetSystemTime();
   while (true) {
     /* Checks if an IRQ happened else wait.*/
-    chEvtWaitAny((eventmask_t)1);
+#ifndef SYNCHRONOUS
+    chEvtWaitAny(ALL_EVENTS);
+#else
+    msg_t msg;
+
+    /* Waiting for the IRQ to happen.*/
+    chSysLock();
+    msg = chThdSuspendS(&trp);
+    chSysUnlock();
+#endif
     //int32_t x, y, z;
-    //unsigned i;
 #if 0
+    unsigned i;
     /* Keeping an history of the latest four accelerometer readings.*/
     for (i = 3; i > 0; i--) {
       xbuf[i] = xbuf[i - 1];
@@ -255,24 +286,6 @@ static THD_FUNCTION(AccelThread, arg) {
   }
 }
 
-/*
- * Hardware interrupt which wakes accel thread
- */
-// TODO: check STM32_OTG2_EP1OUT_HANDLER
-/*
-CH_IRQ_HANDLER(EXT)
-{
-   CH_IRQ_PROLOGUE();
-
-   chSysLockFromISR();
-   chEvtSignalI(tp_accel, (eventmask_t)1);
-   chSysUnlockFromISR();
-
-   // reset IRQ source before exiting
-
-   CH_IRQ_EPILOGUE();
-}
-*/
 
 /*===========================================================================*/
 /* Initialization and main thread.                                           */
@@ -324,12 +337,15 @@ int main(void) {
   palSetPadMode(GPIOD, GPIOD_LED5, PAL_MODE_ALTERNATE(2));      /* Red.     */
   palSetPadMode(GPIOD, GPIOD_LED6, PAL_MODE_ALTERNATE(2));      /* Blue.    */
 
+  /* Initiate IRQ */
+  nvicEnableVector(EXTI0_IRQn, CORTEX_PRIO_MASK(1));
+
   /*
    * Starting threads.
    */
-  chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, AccelThread, NULL);
+  chThdCreateStatic(waThread1, sizeof(waThread1), HIGHPRIO, AccelThread, NULL);
   chThdCreateStatic(waWriter, sizeof(waWriter), NORMALPRIO, Writer, NULL);
-  chThdCreateStatic(waReader, sizeof(waReader), NORMALPRIO, Reader, NULL);
+  // chThdCreateStatic(waReader, sizeof(waReader), NORMALPRIO, Reader, NULL);
 
 
   /*
