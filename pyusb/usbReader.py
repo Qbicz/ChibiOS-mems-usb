@@ -19,7 +19,7 @@ class UsbLivePlot:
         self.usbDev.set_configuration()
         
         # find and assign IN endpoint
-        self.epIn = usbLive.findEndpoint(usb.util.ENDPOINT_IN)
+        self.epIn = self.findEndpoint(usb.util.ENDPOINT_IN)
             
         # create figure with two subplots
         self.fig = plt.figure()
@@ -46,11 +46,16 @@ class UsbLivePlot:
         x = int.from_bytes(xbytes, byteorder='little', signed='false')
         y = int.from_bytes(ybytes, byteorder='little', signed='false')
         z = int.from_bytes(zbytes, byteorder='little', signed='false')
+        # convert from (-128,+128) to g values; approx 54 lsb = 1g
+        x = x/54
+        y = y/54
+        z = z/54
+        
         return x,y,z
         
     def usbReadToFile(self, filename):
         pass
-        # TODO: read to file and from it load to plot
+        # TODO: save to file bigger chunks and from it load to plot
 
     def animate(self, i):
         
@@ -61,9 +66,9 @@ class UsbLivePlot:
         t = time.time() - self.startTime
         
         self.timear.append(float(t))
-        self.xar.append(int(x))
-        self.yar.append(int(y))
-        self.zar.append(int(z))
+        self.xar.append(x)
+        self.yar.append(y)
+        self.zar.append(z)
                
         self.ax1.clear()
         self.ax2.clear()
@@ -101,7 +106,7 @@ def main():
     usbLive = UsbLivePlot()
 
     # Create a self-updating plot
-    ani = animation.FuncAnimation(usbLive.fig, usbLive.animate, interval = 10) # TODO: use USB data ready interrupt
+    ani = animation.FuncAnimation(usbLive.fig, usbLive.animate, interval = 5) # TODO: use USB data ready interrupt
     plt.title('STM32F4 Discovery accelerometers')
     plt.show()
     

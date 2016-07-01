@@ -16,22 +16,16 @@
 
 #include "ch.h"
 #include "hal.h"
-#include "test.h"
 
 #include "lis302dl.h"
 
 #include "usbcfg.h"
 
 /* Accelerometer configuration bits - not included in lis302dl.h */
-#define LIS302DL_STATUS_XYZ_READY   0x08
 #define LIS302DL_CTRL_XYZ_EN        0x07
 #define LIS302DL_CTRL_POWER         0x40
 #define LIS302DL_CTRL_400HZ         0x80
 #define LIS302DL_CTRL_DATAREADY1    0x04
-
-/* use synchronous (blocking) thread waking */
-#define SYNCHRONOUS
-#undef SYNCHRONOUS
 
 /* Accel data - common for all threads, only modified in AccelThread */
 static int8_t x, y, z;
@@ -39,11 +33,7 @@ static int8_t x, y, z;
 
 //static uint8_t rxbuf[8];
 
-#ifndef SYNCHRONOUS
-  static thread_t *tp_accel;
-#else
-  static thread_reference_t trp = NULL;
-#endif
+static thread_t *tp_accel;
 /*===========================================================================*/
 /* Accelerometer related.                                                    */
 /*===========================================================================*/
@@ -90,49 +80,7 @@ static void extCallback(EXTDriver *extp, expchannel_t channel)
   (void)channel;
 
   chSysLockFromISR();
-  /* Wake thread */
-#ifndef SYNCHRONOUS
-  //chEvtSignalI(tp_accel, (eventmask_t)1);
-
-
-
-  /* Reading MEMS accelerometer X, Y and Z registers.*/
-      x = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
-      y = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
-      z = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
-
-  #if 0
-      /* Calculating average of the latest four accelerometer readings.*/
-      x = ((int32_t)xbuf[0] + (int32_t)xbuf[1] +
-           (int32_t)xbuf[2] + (int32_t)xbuf[3]) / 4;
-      y = ((int32_t)ybuf[0] + (int32_t)ybuf[1] +
-           (int32_t)ybuf[2] + (int32_t)ybuf[3]) / 4;
-      z = ((int32_t)zbuf[0] + (int32_t)zbuf[1] +
-           (int32_t)zbuf[2] + (int32_t)zbuf[3]) / 4;
-  #endif
-      /* Reprogramming the four PWM channels using the accelerometer data.*/
-      if (y < 0) {
-        pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)-y);
-        pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)0);
-      }
-      else {
-        pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)y);
-        pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)0);
-      }
-      if (x < 0) {
-        pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)-x);
-        pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)0);
-      }
-      else {
-        pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)x);
-        pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
-      }
-
-
-
-#else
-  chThdResumeI(&trp, (msg_t)0xFEED);
-#endif
+  chEvtSignalI(tp_accel, (eventmask_t)1); /* Wake thread */
   chSysUnlockFromISR();
 }
 
@@ -193,7 +141,7 @@ static THD_FUNCTION(Writer, arg) {
                             xyzbuf, sizeof(xyzbuf));
                             //txbuf, sizeof (txbuf) - 1);
     if (msg == MSG_RESET)
-      chThdSleepMilliseconds(50);
+      chThdSleepMilliseconds(5);
   }
 }
 #ifdef READER
@@ -223,6 +171,8 @@ static void lis302init(void)
    * enable DataReady signal INT1 (PE0 pin) by setting I1CFG in CTRL_REG3 to "100"
    * Sensor is in "Power down" state until first dummy read
    */
+
+  /* Reboot memory content */
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG2, 0x40);
   while(lis302dlReadRegister(&SPID1, LIS302DL_CTRL_REG2) & 0x40)
     ;
@@ -233,11 +183,16 @@ static void lis302init(void)
 
   /* dummy read to put down accelerometer interrupt */
   lis302dlReadRegister(&SPID1, LIS302DL_STATUS_REG);
+  lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
+  lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
+  lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
 
-  /* Power up sensor and enable external interrupt on STM32 */
+  /* enable external interrupt on STM32 */
+  extChannelEnable(&EXTD1, 0);  // PE0
+
+  /* Power up sensor */
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1,
              LIS302DL_CTRL_XYZ_EN | LIS302DL_CTRL_POWER | LIS302DL_CTRL_400HZ);
-  extChannelEnable(&EXTD1, 0);  // PE0
 }
 
 /*
@@ -248,57 +203,23 @@ static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(AccelThread, arg) {
 #if 0
   static int8_t xbuf, ybuf, zbuf;  /* Last accelerometer data.*/
-  systime_t time;                           /* Next deadline.*/
 #endif
-
-  /* Initialize accelerometer with PE0 external interrupt on data ready */
-  lis302init();
 
   (void)arg;
   chRegSetThreadName("accelReader");
-#ifndef SYNCHRONOUS
   tp_accel = chThdGetSelfX();
-#endif
 
   /* Reader thread loop.*/
-  //time = chVTGetSystemTime();
   while (true) {
+
     /* Checks if an IRQ happened else wait.*/
-#ifndef SYNCHRONOUS
     chEvtWaitAny((eventmask_t)1);
-#else
-    msg_t msg;
-
-    /* Waiting for the IRQ to happen.*/
-    chSysLock();
-    msg = chThdSuspendS(&trp);
-    chSysUnlock();
-#endif
-
-#if 0
-    unsigned i;
-    /* Keeping an history of the latest four accelerometer readings.*/
-    for (i = 3; i > 0; i--) {
-      xbuf[i] = xbuf[i - 1];
-      ybuf[i] = ybuf[i - 1];
-      zbuf[i] = zbuf[i - 1];
-    }
-#endif
 
     /* Reading MEMS accelerometer X, Y and Z registers.*/
     x = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
     y = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
     z = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
 
-#if 0
-    /* Calculating average of the latest four accelerometer readings.*/
-    x = ((int32_t)xbuf[0] + (int32_t)xbuf[1] +
-         (int32_t)xbuf[2] + (int32_t)xbuf[3]) / 4;
-    y = ((int32_t)ybuf[0] + (int32_t)ybuf[1] +
-         (int32_t)ybuf[2] + (int32_t)ybuf[3]) / 4;
-    z = ((int32_t)zbuf[0] + (int32_t)zbuf[1] +
-         (int32_t)zbuf[2] + (int32_t)zbuf[3]) / 4;
-#endif
     /* Reprogramming the four PWM channels using the accelerometer data.*/
     if (y < 0) {
       pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)-y);
@@ -316,10 +237,6 @@ static THD_FUNCTION(AccelThread, arg) {
       pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)x);
       pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
     }
-
-    // TODO: use LIS302 accelerometer ready interrupt
-    /* Waiting until the next 250 milliseconds time interval.*/
-    //chThdSleepUntil(time += MS2ST(100));
   }
 }
 
@@ -364,6 +281,9 @@ int main(void) {
    */
   extStart(&EXTD1, &extcfg);    // GPIO E
 
+  /* Initialize accelerometer with PE0 external interrupt on data ready */
+  lis302init();
+
   /*
    * Initializes the PWM driver 4, routes the TIM4 outputs to the board LEDs.
    */
@@ -372,9 +292,6 @@ int main(void) {
   palSetPadMode(GPIOD, GPIOD_LED3, PAL_MODE_ALTERNATE(2));      /* Orange.  */
   palSetPadMode(GPIOD, GPIOD_LED5, PAL_MODE_ALTERNATE(2));      /* Red.     */
   palSetPadMode(GPIOD, GPIOD_LED6, PAL_MODE_ALTERNATE(2));      /* Blue.    */
-
-  /* Initiate IRQ */
-  //nvicEnableVector(EXTI0_IRQn, CORTEX_PRIO_MASK(1));
 
   /*
    * Starting threads.
