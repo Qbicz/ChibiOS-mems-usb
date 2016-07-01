@@ -78,10 +78,10 @@ class UsbLivePlot:
         self.ax3.plot(self.timear, self.zar)
         
         self.ax1.set_title('Acceleration from STM32F4Discovery')
-        self.ax2.set_xlabel('Time [s]')
-        self.ax1.set_ylabel('x-axis acceleration')
-        self.ax2.set_ylabel('y-axis acceleration')
-        self.ax3.set_ylabel('z-axis acceleration')
+        self.ax1.set_ylabel('x-axis [g]')
+        self.ax2.set_ylabel('y-axis [g]')
+        self.ax3.set_ylabel('z-axis [g]')
+        self.ax3.set_xlabel('Time [s]')
         
         
     def findEndpoint(self, direction):

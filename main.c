@@ -201,8 +201,9 @@ static void lis302init(void)
  */
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(AccelThread, arg) {
-#if 0
-  static int8_t xbuf, ybuf, zbuf;  /* Last accelerometer data.*/
+#if 1
+  static int8_t xbuf[10], ybuf[10], zbuf[10];  /* Last accelerometer data.*/
+  static uint8_t usbCnt;
 #endif
 
   (void)arg;
@@ -236,6 +237,21 @@ static THD_FUNCTION(AccelThread, arg) {
     else {
       pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)x);
       pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
+    }
+
+    if(++usbCnt == 10)
+    {
+      usbCnt = 0;
+
+      /* Concatenate accelerometer data */
+      uint8_t xyzbuf[3];
+      memcpy(xyzbuf                       , &x, sizeof(x));
+      memcpy(xyzbuf+sizeof(x)             , &y, sizeof(y));
+      memcpy(xyzbuf+sizeof(x)+sizeof(y)   , &z, sizeof(z));
+
+      // TODO: USB interrupts
+      msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
+                              xyzbuf, sizeof(xyzbuf));
     }
   }
 }
@@ -297,7 +313,7 @@ int main(void) {
    * Starting threads.
    */
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, AccelThread, NULL);
-  chThdCreateStatic(waWriter, sizeof(waWriter), NORMALPRIO, Writer, NULL);
+  // chThdCreateStatic(waWriter, sizeof(waWriter), NORMALPRIO, Writer, NULL);
   // chThdCreateStatic(waReader, sizeof(waReader), NORMALPRIO, Reader, NULL);
 
 
