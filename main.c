@@ -17,7 +17,7 @@
 #include "ch.h"
 #include "hal.h"
 #include "test.h"
-#include "ext_lld.h"
+
 #include "lis302dl.h"
 
 #include "usbcfg.h"
