@@ -27,7 +27,7 @@
 #define LIS302DL_CTRL_XYZ_EN        0x07
 #define LIS302DL_CTRL_POWER         0x40
 #define LIS302DL_CTRL_400HZ         0x80
-#define LIS302DL_CTRL_DATAREADY1    0x40
+#define LIS302DL_CTRL_DATAREADY1    0x04
 
 /* use synchronous (blocking) thread waking */
 #define SYNCHRONOUS
@@ -101,7 +101,7 @@ static void extCallback(EXTDriver *extp, expchannel_t channel)
 
 static const EXTConfig extcfg = {
   {
-    {EXT_CH_MODE_RISING_EDGE | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOE, extCallback},
+    {EXT_CH_MODE_RISING_EDGE | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOE | EXT_MODE_GPIOA, extCallback},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
@@ -130,8 +130,6 @@ static const EXTConfig extcfg = {
 /*
  * Hardware interrupt which wakes accel thread
  */
-// TODO: check STM32_OTG2_EP1OUT_HANDLER
-
 CH_IRQ_HANDLER(EXTI0_IRQHandler)
 {
    CH_IRQ_PROLOGUE();
@@ -148,6 +146,9 @@ CH_IRQ_HANDLER(EXTI0_IRQHandler)
    // accel IRQ is reset by reading data
 
    CH_IRQ_EPILOGUE();
+
+
+   // TODO: check STM32_OTG2_EP1OUT_HANDLER
 }
 
 /*===========================================================================*/
@@ -173,7 +174,7 @@ static THD_FUNCTION(Writer, arg) {
 
     // TODO: USB interrupts
     msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
-                            xyzbuf, 3*sizeof(x));
+                            xyzbuf, sizeof(xyzbuf));
                             //txbuf, sizeof (txbuf) - 1);
     if (msg == MSG_RESET)
       chThdSleepMilliseconds(50);
@@ -325,8 +326,9 @@ int main(void) {
   /*
    * Initializes the EXT Driver to react to LIS302 interrupt on PE0 pin of Discovery board.
    */
-  extStart(&EXTD1, &extcfg);
-  extChannelEnable(&EXTD1, 0);
+  extStart(&EXTD1, &extcfg);    // GPIO E
+  extChannelEnable(&EXTD1, 0);  // PE0
+  extChannelEnable(&EXTD1, 1);  // PE1
 
   /*
    * Initializes the PWM driver 4, routes the TIM4 outputs to the board LEDs.
@@ -343,7 +345,7 @@ int main(void) {
   /*
    * Starting threads.
    */
-  chThdCreateStatic(waThread1, sizeof(waThread1), HIGHPRIO, AccelThread, NULL);
+  chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, AccelThread, NULL);
   chThdCreateStatic(waWriter, sizeof(waWriter), NORMALPRIO, Writer, NULL);
   // chThdCreateStatic(waReader, sizeof(waReader), NORMALPRIO, Reader, NULL);
 

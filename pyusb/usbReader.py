@@ -19,7 +19,7 @@ class UsbLivePlot:
         self.usbDev.set_configuration()
         
         # find and assign IN endpoint
-        usbLive.epIn = usbLive.findEndpoint(usb.util.ENDPOINT_IN)
+        self.epIn = usbLive.findEndpoint(usb.util.ENDPOINT_IN)
             
         # create figure with two subplots
         self.fig = plt.figure()
