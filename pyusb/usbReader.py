@@ -17,6 +17,9 @@ class UsbLivePlot:
             
         # With no arguments, the first configuration will be the active one
         self.usbDev.set_configuration()
+        
+        # find and assign IN endpoint
+        usbLive.epIn = usbLive.findEndpoint(usb.util.ENDPOINT_IN)
             
         # create figure with two subplots
         self.fig = plt.figure()
@@ -35,23 +38,25 @@ class UsbLivePlot:
         self.zar = []
         
 
-    def xyFromUsb(self, usbData):
+    def xyzFromUsb(self, usbData):
         xbytes = usbData[0              :self.datasize]
         ybytes = usbData[self.datasize  :2*self.datasize]
         zbytes = usbData[2*self.datasize:3*self.datasize]
-        # TODO: change magic numbers to well-named sizes
 
         x = int.from_bytes(xbytes, byteorder='little', signed='false')
         y = int.from_bytes(ybytes, byteorder='little', signed='false')
         z = int.from_bytes(zbytes, byteorder='little', signed='false')
         return x,y,z
         
+    def usbReadToFile(self, filename):
+        pass
+        # TODO: read to file and from it load to plot
 
     def animate(self, i):
         
         # USB read
-        usbData = self.usbDev.read(0x81, 3*self.datasize)
-        x,y,z = self.xyFromUsb(usbData)
+        usbData = self.usbDev.read(self.epIn.bEndpointAddress, 3*self.datasize)
+        x,y,z = self.xyzFromUsb(usbData)
         # TODO: timestamps should be created by MCU
         t = time.time() - self.startTime
         
@@ -74,7 +79,7 @@ class UsbLivePlot:
         self.ax3.set_ylabel('z-axis acceleration')
         
         
-    def findEndpoint(self):
+    def findEndpoint(self, direction):
         cfg = self.usbDev.get_active_configuration()
         intf = cfg[(0,0)]
 
@@ -84,10 +89,11 @@ class UsbLivePlot:
             custom_match = \
             lambda e: \
                 usb.util.endpoint_direction(e.bEndpointAddress) == \
-                usb.util.ENDPOINT_IN)
+                direction)
 
         assert ep is not None
         print(ep)
+        return ep
         
     
 def main():
@@ -95,7 +101,7 @@ def main():
     usbLive = UsbLivePlot()
 
     # Create a self-updating plot
-    ani = animation.FuncAnimation(usbLive.fig, usbLive.animate, interval = 50) # TODO: use USB data ready interrupt
+    ani = animation.FuncAnimation(usbLive.fig, usbLive.animate, interval = 10) # TODO: use USB data ready interrupt
     plt.title('STM32F4 Discovery accelerometers')
     plt.show()
     
