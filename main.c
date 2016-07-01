@@ -31,7 +31,7 @@
 
 /* use synchronous (blocking) thread waking */
 #define SYNCHRONOUS
-//#undef SYNCHRONOUS
+#undef SYNCHRONOUS
 
 /* Accel data - common for all threads, only modified in AccelThread */
 static int8_t x, y, z;
@@ -101,7 +101,7 @@ static void extCallback(EXTDriver *extp, expchannel_t channel)
 
 static const EXTConfig extcfg = {
   {
-    {EXT_CH_MODE_RISING_EDGE | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOE | EXT_MODE_GPIOA, extCallback},
+    {EXT_CH_MODE_RISING_EDGE | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOE, extCallback},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
@@ -231,7 +231,7 @@ static THD_FUNCTION(AccelThread, arg) {
   while (true) {
     /* Checks if an IRQ happened else wait.*/
 #ifndef SYNCHRONOUS
-    chEvtWaitAny(ALL_EVENTS);
+    chEvtWaitAny((eventmask_t)1);
 #else
     msg_t msg;
 
@@ -240,7 +240,6 @@ static THD_FUNCTION(AccelThread, arg) {
     msg = chThdSuspendS(&trp);
     chSysUnlock();
 #endif
-    //int32_t x, y, z;
 #if 0
     unsigned i;
     /* Keeping an history of the latest four accelerometer readings.*/
@@ -250,10 +249,12 @@ static THD_FUNCTION(AccelThread, arg) {
       zbuf[i] = zbuf[i - 1];
     }
 #endif
+
     /* Reading MEMS accelerometer X, Y and Z registers.*/
     x = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
     y = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
     z = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
+
 #if 0
     /* Calculating average of the latest four accelerometer readings.*/
     x = ((int32_t)xbuf[0] + (int32_t)xbuf[1] +
@@ -328,7 +329,6 @@ int main(void) {
    */
   extStart(&EXTD1, &extcfg);    // GPIO E
   extChannelEnable(&EXTD1, 0);  // PE0
-  extChannelEnable(&EXTD1, 1);  // PE1
 
   /*
    * Initializes the PWM driver 4, routes the TIM4 outputs to the board LEDs.

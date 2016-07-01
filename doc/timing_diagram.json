@@ -1,0 +1,20 @@
+{ signal: [
+  ['Akcelerometr',
+  { name: 'INT1 (PE0)', wave: '01..0.......1..0...',  node: '.a..b.........' },
+  { name: 'Read accel', wave: 'xxx345xxxxxxxx345xx',  data: 'x y z x y z' },
+  { name: 'USB INT', 	wave: '0.....1.0........1.',  node: '................' },
+  { name: 'USB data', 	wave: 'xxxxxxx3..xxxxxxxxx',  data: 'usbpacket' },
+  
+  ],
+   {},
+   {},
+   ],
+   head:{
+   text:'Odczyt przyspieszenia i przes³anie po USB',
+   tick:0,
+ },
+  edge: [
+    'a<~>b DataReady', 'c<~>d Stan 11', 'c<~>d Stan 01', 'd<~>e Stan 00', '1-h Dekrementacja'
+  ]
+  
+}
