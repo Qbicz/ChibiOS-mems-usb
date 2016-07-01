@@ -37,7 +37,7 @@
 static int8_t x, y, z;
 // TODO: use Chibi Mailboxes instead
 
-static uint8_t rxbuf[8];
+//static uint8_t rxbuf[8];
 
 #ifndef SYNCHRONOUS
   static thread_t *tp_accel;
@@ -82,7 +82,7 @@ static const SPIConfig spi1cfg = {
 };
 
 /*
- * External interrupt callback. It wakes accel thread
+ * Hardware interrupt which wakes accel thread
  */
 static void extCallback(EXTDriver *extp, expchannel_t channel)
 {
@@ -92,7 +92,44 @@ static void extCallback(EXTDriver *extp, expchannel_t channel)
   chSysLockFromISR();
   /* Wake thread */
 #ifndef SYNCHRONOUS
-  chEvtSignalI(tp_accel, (eventmask_t)1);
+  //chEvtSignalI(tp_accel, (eventmask_t)1);
+
+
+
+  /* Reading MEMS accelerometer X, Y and Z registers.*/
+      x = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
+      y = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
+      z = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
+
+  #if 0
+      /* Calculating average of the latest four accelerometer readings.*/
+      x = ((int32_t)xbuf[0] + (int32_t)xbuf[1] +
+           (int32_t)xbuf[2] + (int32_t)xbuf[3]) / 4;
+      y = ((int32_t)ybuf[0] + (int32_t)ybuf[1] +
+           (int32_t)ybuf[2] + (int32_t)ybuf[3]) / 4;
+      z = ((int32_t)zbuf[0] + (int32_t)zbuf[1] +
+           (int32_t)zbuf[2] + (int32_t)zbuf[3]) / 4;
+  #endif
+      /* Reprogramming the four PWM channels using the accelerometer data.*/
+      if (y < 0) {
+        pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)-y);
+        pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)0);
+      }
+      else {
+        pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)y);
+        pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)0);
+      }
+      if (x < 0) {
+        pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)-x);
+        pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)0);
+      }
+      else {
+        pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)x);
+        pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
+      }
+
+
+
 #else
   chThdResumeI(&trp, (msg_t)0xFEED);
 #endif
@@ -101,7 +138,7 @@ static void extCallback(EXTDriver *extp, expchannel_t channel)
 
 static const EXTConfig extcfg = {
   {
-    {EXT_CH_MODE_RISING_EDGE | EXT_CH_MODE_AUTOSTART | EXT_MODE_GPIOE, extCallback},
+    {EXT_CH_MODE_RISING_EDGE | EXT_MODE_GPIOE, extCallback},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
     {EXT_CH_MODE_DISABLED, NULL},
@@ -127,29 +164,8 @@ static const EXTConfig extcfg = {
   }
 };
 
-/*
- * Hardware interrupt which wakes accel thread
- */
-CH_IRQ_HANDLER(EXTI0_IRQHandler)
-{
-   CH_IRQ_PROLOGUE();
-
-   chSysLockFromISR();
-   /* Wake up thread */
-#ifndef SYNCHRONOUS
-   chEvtSignalI(tp_accel, (eventmask_t)1);
-#else
-  chThdResumeI(&trp, (msg_t)0xFEED);
-#endif
-   chSysUnlockFromISR();
-
-   // accel IRQ is reset by reading data
-
-   CH_IRQ_EPILOGUE();
-
 
    // TODO: check STM32_OTG2_EP1OUT_HANDLER
-}
 
 /*===========================================================================*/
 /* Threads.                                                                  */
@@ -180,7 +196,7 @@ static THD_FUNCTION(Writer, arg) {
       chThdSleepMilliseconds(50);
   }
 }
-
+#ifdef READER
 /*
  * USB reader. This thread reads data from the USB at maximum rate.
  * Can be measured using:
@@ -198,33 +214,51 @@ static THD_FUNCTION(Reader, arg) {
       chThdSleepMilliseconds(50);
   }
 }
+#endif
 
+static void lis302init(void)
+{
+  /*
+   * LIS302DL initialization: X,Y,Z axes with 400Hz rate,
+   * enable DataReady signal INT1 (PE0 pin) by setting I1CFG in CTRL_REG3 to "100"
+   * Sensor is in "Power down" state until first dummy read
+   */
+  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG2, 0x40);
+  while(lis302dlReadRegister(&SPID1, LIS302DL_CTRL_REG2) & 0x40)
+    ;
+
+  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1,
+           LIS302DL_CTRL_XYZ_EN | LIS302DL_CTRL_400HZ);
+  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG3, LIS302DL_CTRL_DATAREADY1);
+
+  /* dummy read to put down accelerometer interrupt */
+  lis302dlReadRegister(&SPID1, LIS302DL_STATUS_REG);
+
+  /* Power up sensor and enable external interrupt on STM32 */
+  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1,
+             LIS302DL_CTRL_XYZ_EN | LIS302DL_CTRL_POWER | LIS302DL_CTRL_400HZ);
+  extChannelEnable(&EXTD1, 0);  // PE0
+}
 
 /*
- * This is a periodic thread that reads accelerometer and outputs
+ * This is a data-ready-triggered thread that reads accelerometer and outputs
  * result to PWM.
  */
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(AccelThread, arg) {
-  //static int8_t xbuf, ybuf, zbuf;  /* Last accelerometer data.*/
-#ifndef SYNCHRONOUS
+#if 0
+  static int8_t xbuf, ybuf, zbuf;  /* Last accelerometer data.*/
   systime_t time;                           /* Next deadline.*/
 #endif
-  /*
-   * LIS302DL initialization: X,Y,Z axes with 400Hz rate,
-   * enable DataReady signal INT1 (PE0 pin) by setting I1CFG in CTRL_REG3 to "100"
-   */
-  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1,
-           LIS302DL_CTRL_XYZ_EN | LIS302DL_CTRL_POWER | LIS302DL_CTRL_400HZ);
-  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG2, 0x00);
-  lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG3, LIS302DL_CTRL_DATAREADY1);
+
+  /* Initialize accelerometer with PE0 external interrupt on data ready */
+  lis302init();
 
   (void)arg;
   chRegSetThreadName("accelReader");
 #ifndef SYNCHRONOUS
   tp_accel = chThdGetSelfX();
 #endif
-  palSetPad(GPIOD, GPIOD_LED3); // Orange, Debug
 
   /* Reader thread loop.*/
   //time = chVTGetSystemTime();
@@ -240,6 +274,7 @@ static THD_FUNCTION(AccelThread, arg) {
     msg = chThdSuspendS(&trp);
     chSysUnlock();
 #endif
+
 #if 0
     unsigned i;
     /* Keeping an history of the latest four accelerometer readings.*/
@@ -273,12 +308,12 @@ static THD_FUNCTION(AccelThread, arg) {
       pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)y);
       pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)0);
     }
-    if (z < 0) {
-      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)-z);
+    if (x < 0) {
+      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)-x);
       pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)0);
     }
     else {
-      pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)z);
+      pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)x);
       pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
     }
 
@@ -328,7 +363,6 @@ int main(void) {
    * Initializes the EXT Driver to react to LIS302 interrupt on PE0 pin of Discovery board.
    */
   extStart(&EXTD1, &extcfg);    // GPIO E
-  extChannelEnable(&EXTD1, 0);  // PE0
 
   /*
    * Initializes the PWM driver 4, routes the TIM4 outputs to the board LEDs.
@@ -340,7 +374,7 @@ int main(void) {
   palSetPadMode(GPIOD, GPIOD_LED6, PAL_MODE_ALTERNATE(2));      /* Blue.    */
 
   /* Initiate IRQ */
-  nvicEnableVector(EXTI0_IRQn, CORTEX_PRIO_MASK(1));
+  //nvicEnableVector(EXTI0_IRQn, CORTEX_PRIO_MASK(1));
 
   /*
    * Starting threads.
