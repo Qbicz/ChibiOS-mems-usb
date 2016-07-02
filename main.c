@@ -27,6 +27,8 @@
 #define LIS302DL_CTRL_400HZ         0x80
 #define LIS302DL_CTRL_DATAREADY1    0x04
 
+#define CHUNK 10
+
 /* Accel data - common for all threads, only modified in AccelThread */
 static int8_t x, y, z;
 // TODO: use Chibi Mailboxes instead
@@ -120,6 +122,7 @@ static const EXTConfig extcfg = {
 /*===========================================================================*/
 #define TEST_WA_SIZE    THD_WORKING_AREA_SIZE(256)
 
+#if WRITER
 /*
  * USB writer. This thread writes accelerometer data to the USB at maximum rate.
  */
@@ -144,6 +147,8 @@ static THD_FUNCTION(Writer, arg) {
       chThdSleepMilliseconds(5);
   }
 }
+#endif
+
 #ifdef READER
 /*
  * USB reader. This thread reads data from the USB at maximum rate.
@@ -202,7 +207,7 @@ static void lis302init(void)
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(AccelThread, arg) {
 #if 1
-  static int8_t xbuf[10], ybuf[10], zbuf[10];  /* Last accelerometer data.*/
+  static int8_t xbuf[CHUNK], ybuf[CHUNK], zbuf[CHUNK];  /* Last accelerometer data.*/
   static uint8_t usbCnt;
 #endif
 
@@ -216,10 +221,18 @@ static THD_FUNCTION(AccelThread, arg) {
     /* Checks if an IRQ happened else wait.*/
     chEvtWaitAny((eventmask_t)1);
 
+    unsigned i;
+    /* Keeping a history of the latest ten accelerometer readings.*/
+    for (i = CHUNK-1; i > 0; i--) {
+      xbuf[i] = xbuf[i - 1];
+      ybuf[i] = ybuf[i - 1];
+      zbuf[i] = zbuf[i - 1];
+    }
+
     /* Reading MEMS accelerometer X, Y and Z registers.*/
-    x = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
-    y = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
-    z = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
+    xbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
+    ybuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
+    zbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
 
     /* Reprogramming the four PWM channels using the accelerometer data.*/
     if (y < 0) {
@@ -239,15 +252,15 @@ static THD_FUNCTION(AccelThread, arg) {
       pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
     }
 
-    if(++usbCnt == 10)
+    if(++usbCnt == CHUNK)
     {
       usbCnt = 0;
 
       /* Concatenate accelerometer data */
-      uint8_t xyzbuf[3];
-      memcpy(xyzbuf                       , &x, sizeof(x));
-      memcpy(xyzbuf+sizeof(x)             , &y, sizeof(y));
-      memcpy(xyzbuf+sizeof(x)+sizeof(y)   , &z, sizeof(z));
+      uint8_t xyzbuf[3*CHUNK];
+      memcpy(xyzbuf                             , &xbuf, sizeof(xbuf));
+      memcpy(xyzbuf+sizeof(xbuf)                , &ybuf, sizeof(ybuf));
+      memcpy(xyzbuf+sizeof(xbuf)+sizeof(ybuf)   , &zbuf, sizeof(zbuf));
 
       // TODO: USB interrupts
       msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
