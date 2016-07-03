@@ -245,7 +245,7 @@ static USBInEndpointState ep2instate;
  * @brief   EP2 initialization structure (IN only).
  */
 static const USBEndpointConfig ep2config = {
-  USB_EP_MODE_TYPE_INTR,
+  USB_EP_MODE_TYPE_BULK,
   NULL,
   NULL,
   NULL,

@@ -31,7 +31,7 @@ class UsbLivePlot:
         # TODO: add angles subplots on the right side of the window
         
         # create buffers
-        self.datasize = 1
+        self.datasize = 10
         self.timear = []
         self.xar = []
         self.yar = []
@@ -42,7 +42,7 @@ class UsbLivePlot:
         xbytes = usbData[0              :self.datasize]
         ybytes = usbData[self.datasize  :2*self.datasize]
         zbytes = usbData[2*self.datasize:3*self.datasize]
-
+        
         x = int.from_bytes(xbytes, byteorder='little', signed='false')
         y = int.from_bytes(ybytes, byteorder='little', signed='false')
         z = int.from_bytes(zbytes, byteorder='little', signed='false')
@@ -106,7 +106,7 @@ def main():
     usbLive = UsbLivePlot()
 
     # Create a self-updating plot
-    ani = animation.FuncAnimation(usbLive.fig, usbLive.animate, interval = 5) # TODO: use USB data ready interrupt
+    ani = animation.FuncAnimation(usbLive.fig, usbLive.animate, interval = 10) # TODO: use USB data ready interrupt
     plt.title('STM32F4 Discovery accelerometers')
     plt.show()
     

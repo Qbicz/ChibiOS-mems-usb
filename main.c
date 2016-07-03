@@ -27,7 +27,7 @@
 #define LIS302DL_CTRL_400HZ         0x80
 #define LIS302DL_CTRL_DATAREADY1    0x04
 
-#define CHUNK 10
+#define CHUNK 1
 
 /* Accel data - common for all threads, only modified in AccelThread */
 static int8_t x, y, z;
@@ -122,7 +122,6 @@ static const EXTConfig extcfg = {
 /*===========================================================================*/
 #define TEST_WA_SIZE    THD_WORKING_AREA_SIZE(256)
 
-#if WRITER
 /*
  * USB writer. This thread writes accelerometer data to the USB at maximum rate.
  */
@@ -144,10 +143,9 @@ static THD_FUNCTION(Writer, arg) {
                             xyzbuf, sizeof(xyzbuf));
                             //txbuf, sizeof (txbuf) - 1);
     if (msg == MSG_RESET)
-      chThdSleepMilliseconds(5);
+      chThdSleepMilliseconds(10);
   }
 }
-#endif
 
 #ifdef READER
 /*
@@ -220,7 +218,7 @@ static THD_FUNCTION(AccelThread, arg) {
 
     /* Checks if an IRQ happened else wait.*/
     chEvtWaitAny((eventmask_t)1);
-
+#if 0
     unsigned i;
     /* Keeping a history of the latest ten accelerometer readings.*/
     for (i = CHUNK-1; i > 0; i--) {
@@ -228,7 +226,7 @@ static THD_FUNCTION(AccelThread, arg) {
       ybuf[i] = ybuf[i - 1];
       zbuf[i] = zbuf[i - 1];
     }
-
+#endif
     /* Reading MEMS accelerometer X, Y and Z registers.*/
     xbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
     ybuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
@@ -251,11 +249,11 @@ static THD_FUNCTION(AccelThread, arg) {
       pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)x);
       pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
     }
-
+#if 0
     if(++usbCnt == CHUNK)
     {
       usbCnt = 0;
-
+#endif
       /* Concatenate accelerometer data */
       uint8_t xyzbuf[3*CHUNK];
       memcpy(xyzbuf                             , &xbuf, sizeof(xbuf));
@@ -266,6 +264,7 @@ static THD_FUNCTION(AccelThread, arg) {
       msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
                               xyzbuf, sizeof(xyzbuf));
     }
+#endif
   }
 }
 
