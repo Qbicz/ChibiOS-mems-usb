@@ -31,7 +31,7 @@ static const uint8_t vcom_device_descriptor_data[18] = {
                          0x00,          /* bDeviceProtocol.                 */
                          0x40,          /* bMaxPacketSize.                  */
                          0x0483,        /* idVendor (ST).                   */
-                         0xBABE,        /* idProduct.                       */
+                         0xFACE,        /* idProduct.                       */
                          0x0200,        /* bcdDevice.                       */
                          1,             /* iManufacturer.                   */
                          2,             /* iProduct.                        */
@@ -113,12 +113,12 @@ static const uint8_t vcom_configuration_descriptor_data[32] = { // 32 bytes - on
                          0x00),         /* iInterface.                      */
   /* Endpoint 3 Descriptor. 7 byte macro */
   USB_DESC_ENDPOINT     (USBD1_DATA_AVAILABLE_EP,       /* bEndpointAddress.*/
-                         0x02,          /* bmAttributes (Bulk).             */
+                         0x03,          /* bmAttributes (Interrupt).             */
                          0x0040,        /* wMaxPacketSize.                  */
                          0x00),         /* bInterval.                       */
   /* Endpoint 1 Descriptor.*/
   USB_DESC_ENDPOINT     (USBD1_DATA_REQUEST_EP|0x80,    /* bEndpointAddress.*/
-                         0x02,          /* bmAttributes (Bulk).             */
+                         0x03,          /* bmAttributes (Interrupt).             */
                          0x0040,        /* wMaxPacketSize.                  */
                          0x00)          /* bInterval.                       */
 #endif // INTERFACE1
@@ -245,7 +245,7 @@ static USBInEndpointState ep2instate;
  * @brief   EP2 initialization structure (IN only).
  */
 static const USBEndpointConfig ep2config = {
-  USB_EP_MODE_TYPE_INTR,
+  USB_EP_MODE_TYPE_BULK,
   NULL,
   NULL,
   NULL,
