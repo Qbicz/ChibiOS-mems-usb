@@ -121,7 +121,7 @@ static const EXTConfig extcfg = {
 /* Threads.                                                                  */
 /*===========================================================================*/
 #define TEST_WA_SIZE    THD_WORKING_AREA_SIZE(256)
-
+#if 1
 /*
  * USB writer. This thread writes accelerometer data to the USB at maximum rate.
  */
@@ -142,10 +142,11 @@ static THD_FUNCTION(Writer, arg) {
     msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
                             xyzbuf, sizeof(xyzbuf));
                             //txbuf, sizeof (txbuf) - 1);
-    if (msg == MSG_RESET)
-      chThdSleepMilliseconds(10);
+    //if (msg == MSG_RESET)
+    chThdSleepMilliseconds(2.5);
   }
 }
+#endif
 
 #ifdef READER
 /*
@@ -167,14 +168,13 @@ static THD_FUNCTION(Reader, arg) {
 }
 #endif
 
-static void lis302init(void)
-{
-  /*
+/*
    * LIS302DL initialization: X,Y,Z axes with 400Hz rate,
    * enable DataReady signal INT1 (PE0 pin) by setting I1CFG in CTRL_REG3 to "100"
    * Sensor is in "Power down" state until first dummy read
    */
-
+static void lis302init(void)
+{
   /* Reboot memory content */
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG2, 0x40);
   while(lis302dlReadRegister(&SPID1, LIS302DL_CTRL_REG2) & 0x40)
@@ -198,13 +198,14 @@ static void lis302init(void)
              LIS302DL_CTRL_XYZ_EN | LIS302DL_CTRL_POWER | LIS302DL_CTRL_400HZ);
 }
 
+
 /*
  * This is a data-ready-triggered thread that reads accelerometer and outputs
  * result to PWM.
  */
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(AccelThread, arg) {
-#if 1
+#if 0
   static int8_t xbuf[CHUNK], ybuf[CHUNK], zbuf[CHUNK];  /* Last accelerometer data.*/
   static uint8_t usbCnt;
 #endif
@@ -218,19 +219,12 @@ static THD_FUNCTION(AccelThread, arg) {
 
     /* Checks if an IRQ happened else wait.*/
     chEvtWaitAny((eventmask_t)1);
-#if 0
-    unsigned i;
-    /* Keeping a history of the latest ten accelerometer readings.*/
-    for (i = CHUNK-1; i > 0; i--) {
-      xbuf[i] = xbuf[i - 1];
-      ybuf[i] = ybuf[i - 1];
-      zbuf[i] = zbuf[i - 1];
-    }
-#endif
+
     /* Reading MEMS accelerometer X, Y and Z registers.*/
-    xbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
-    ybuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
-    zbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
+    x = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
+    y = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
+    z = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
+    //zbuf[0]
 
     /* Reprogramming the four PWM channels using the accelerometer data.*/
     if (y < 0) {
@@ -249,22 +243,7 @@ static THD_FUNCTION(AccelThread, arg) {
       pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)x);
       pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
     }
-#if 0
-    if(++usbCnt == CHUNK)
-    {
-      usbCnt = 0;
-#endif
-      /* Concatenate accelerometer data */
-      uint8_t xyzbuf[3*CHUNK];
-      memcpy(xyzbuf                             , &xbuf, sizeof(xbuf));
-      memcpy(xyzbuf+sizeof(xbuf)                , &ybuf, sizeof(ybuf));
-      memcpy(xyzbuf+sizeof(xbuf)+sizeof(ybuf)   , &zbuf, sizeof(zbuf));
 
-      // TODO: USB interrupts
-      msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
-                              xyzbuf, sizeof(xyzbuf));
-    }
-#endif
   }
 }
 
@@ -309,7 +288,9 @@ int main(void) {
    */
   extStart(&EXTD1, &extcfg);    // GPIO E
 
-  /* Initialize accelerometer with PE0 external interrupt on data ready */
+  /*
+   * Initializes accelerometer with PE0 external interrupt on data ready.
+   */
   lis302init();
 
   /*
@@ -325,7 +306,7 @@ int main(void) {
    * Starting threads.
    */
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, AccelThread, NULL);
-  // chThdCreateStatic(waWriter, sizeof(waWriter), NORMALPRIO, Writer, NULL);
+  chThdCreateStatic(waWriter, sizeof(waWriter), NORMALPRIO, Writer, NULL);
   // chThdCreateStatic(waReader, sizeof(waReader), NORMALPRIO, Reader, NULL);
 
 
