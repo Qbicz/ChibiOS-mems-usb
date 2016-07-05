@@ -21,6 +21,8 @@
 #define USBD1_DATA_AVAILABLE_EP         1
 #define USBD1_INTERRUPT_REQUEST_EP      2
 
+#define CHUNK_INTERVAL_FS               0x32 /* 50ms for packet of 20 data reads (USB 2.0 FS) */
+
 extern const USBConfig usbcfg;
 
 #endif  /* _USBCFG_H_ */
