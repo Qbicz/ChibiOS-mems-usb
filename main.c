@@ -18,8 +18,9 @@
 #include "hal.h"
 
 #include "lis302dl.h"
-
 #include "usbcfg.h"
+
+#include <string.h> /* for memcpy() */
 
 /* Accelerometer configuration bits - not included in lis302dl.h */
 #define LIS302DL_CTRL_XYZ_EN        0x07
@@ -27,16 +28,20 @@
 #define LIS302DL_CTRL_400HZ         0x80
 #define LIS302DL_CTRL_DATAREADY1    0x04
 
-#define CHUNK 20
+/* Number of data points sent in USB packet */
+#define CHUNK 16
 
 /* Accel data - common for all threads, only modified in AccelThread */
 static int8_t xbuf[CHUNK], ybuf[CHUNK], zbuf[CHUNK];
+//static uint16_t timebuf[CHUNK];
 
 /* static struct AccelData
 {
    int8_t x, y, z;
-
+   uint16_t t;
 } accd; */
+// TODO: check sizeof(accd) - if data is padded
+
 //static int8_t x, y, z;
 
 /* Thread structure pointer used when switching threads */
@@ -120,7 +125,6 @@ static const EXTConfig extcfg = {
   }
 };
 
-
 /*===========================================================================*/
 /* Threads.                                                                  */
 /*===========================================================================*/
@@ -134,34 +138,108 @@ static THD_FUNCTION(Writer, arg) {
 
   (void)arg;
   chRegSetThreadName("writer");
-#if CYCLIC
   systime_t time = chVTGetSystemTime();
-#endif
+  static uint8_t usbCnt;
+  static int8_t pwmState;
 
   // TODO: STM32_OTG1_EP1OUT_HANDLER
 
   while (true) {
     /* Concatenate accelerometer data */
-    uint8_t xyzbuf[3*CHUNK];
-    memcpy(xyzbuf                            , &xbuf, sizeof(xbuf));
-    memcpy(xyzbuf+sizeof(xbuf)               , &ybuf, sizeof(ybuf));
-    memcpy(xyzbuf+sizeof(xbuf)+sizeof(ybuf)  , &zbuf, sizeof(zbuf));
+    uint8_t usbBuf[3*CHUNK];
+    memcpy(usbBuf                            , &xbuf, sizeof(xbuf));
+    memcpy(usbBuf+sizeof(xbuf)               , &ybuf, sizeof(ybuf));
+    memcpy(usbBuf+2*sizeof(xbuf)             , &zbuf, sizeof(zbuf));
+    //memcpy(usbBuf+3*sizeof(xbuf)             , &timebuf, sizeof(timebuf));
 
     // TODO: USB interrupts
     // TODO: ep1outstate.thread
 
-    msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
-                            xyzbuf, sizeof(xyzbuf));
-                            //txbuf, sizeof (txbuf) - 1);
-    //if (msg == MSG_RESET)
+    msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP, usbBuf, sizeof(usbBuf));
+
+    /* Indicate 1 Hz on red LED */
+    if(++usbCnt >= 25) // 25
+    {
+      pwmState = pwmState ? 0x00 : 0xFF; /* toggle */
+      pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)pwmState);
+      usbCnt = 0;
+    }
 
     /* Operate at 400Hz, not accurately (time error cumulation) */
-    chThdSleepMilliseconds(2.5);
+    //chThdSleepMilliseconds(CHUNK*2.5f);
 
-#if CYCLIC
-    /* Accurately 400Hz: Waiting until the next 2.5 milliseconds time interval (400Hz)*/
-    chThdSleepUntil(time += MS2ST(2.5));
+    /* Accurately 400Hz: Waiting until the next 40 milliseconds time interval */
+    chThdSleepUntil(time += MS2ST(CHUNK*2.5f));
+
+    if(msg == MSG_RESET)
+      chThdSleepMilliseconds(5);
+  }
+}
+
+/*
+ * This is a data-ready-triggered thread that reads accelerometer and outputs
+ * result to PWM. Read data is available for USB Writer thread.
+ */
+static THD_WORKING_AREA(waThread1, 128);
+static THD_FUNCTION(AccelThread, arg) {
+#if 0
+  static int8_t xbuf[CHUNK], ybuf[CHUNK], zbuf[CHUNK];  /* Last accelerometer data.*/
 #endif
+  static uint8_t readCnt;
+  static int8_t pwmState;
+
+  (void)arg;
+  chRegSetThreadName("accelReader");
+  tp_accel = chThdGetSelfX();
+  //const systime_t start = chVTGetSystemTime();
+
+  /* Accelerometer reader thread loop.*/
+  while (true) {
+
+    /* Checks if an IRQ happened else wait.*/
+    chEvtWaitAny((eventmask_t)1);
+
+    unsigned i;
+    /* Keeping an history of the latest accelerometer readings with timestamp */
+    for (i = CHUNK-1; i > 0; i--) {
+      xbuf[i] = xbuf[i - 1];
+      ybuf[i] = ybuf[i - 1];
+      zbuf[i] = zbuf[i - 1];
+      //timebuf[i] = timebuf[i - 1];
+    }
+
+    /* Reading MEMS accelerometer X, Y and Z registers.*/
+    xbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
+    ybuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
+    zbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
+    /* Current time */
+    //timebuf[0] = (uint16_t)ST2MS(chVTTimeElapsedSinceX(start));
+
+    /* Reprogramming the three PWM channels using the accelerometer data.*/
+    if (ybuf[0] < 0) {
+      pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)-ybuf[0]);
+      //pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)0);
+    }
+    else {
+      //pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)ybuf[0]);
+      pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)0);
+    }
+    if (xbuf[0] < 0) {
+      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)-xbuf[0]);
+      //pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)0);
+    }
+    else {
+      //pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)xbuf[0]);
+      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
+    }
+
+    /* Indicate 1 Hz on blue LED */
+    if(++readCnt >= 200)
+    {
+      pwmState = pwmState ? 0x00 : 0xFF; /* toggle */
+      pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)pwmState);
+      readCnt = 0;
+    }
   }
 }
 
@@ -194,64 +272,6 @@ static void lis302init(void)
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1,
              LIS302DL_CTRL_XYZ_EN | LIS302DL_CTRL_POWER | LIS302DL_CTRL_400HZ);
 }
-
-
-/*
- * This is a data-ready-triggered thread that reads accelerometer and outputs
- * result to PWM. Read data is available for USB Writer thread.
- */
-static THD_WORKING_AREA(waThread1, 128);
-static THD_FUNCTION(AccelThread, arg) {
-#if 0
-  static int8_t xbuf[CHUNK], ybuf[CHUNK], zbuf[CHUNK];  /* Last accelerometer data.*/
-  static uint8_t usbCnt;
-#endif
-
-  (void)arg;
-  chRegSetThreadName("accelReader");
-  tp_accel = chThdGetSelfX();
-
-  /* Accelerometer reader thread loop.*/
-  while (true) {
-
-    /* Checks if an IRQ happened else wait.*/
-    chEvtWaitAny((eventmask_t)1);
-
-    unsigned i;
-    /* Keeping an history of the latest accelerometer readings.*/
-    for (i = CHUNK-1; i > 0; i--) {
-      xbuf[i] = xbuf[i - 1];
-      ybuf[i] = ybuf[i - 1];
-      zbuf[i] = zbuf[i - 1];
-    }
-
-    /* Reading MEMS accelerometer X, Y and Z registers.*/
-    xbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
-    ybuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
-    zbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
-
-    /* Reprogramming the four PWM channels using the accelerometer data.*/
-    if (ybuf[0] < 0) {
-      pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)-ybuf[0]);
-      pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)0);
-    }
-    else {
-      pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)ybuf[0]);
-      pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)0);
-    }
-    if (xbuf[0] < 0) {
-      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)-xbuf[0]);
-      pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)0);
-    }
-    else {
-      pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)xbuf[0]);
-      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
-    }
-
-    // if not cyclic, wake Writer thread here
-  }
-}
-
 
 /*===========================================================================*/
 /* Initialization and main thread.                                           */

@@ -31,7 +31,7 @@ static const uint8_t usb_device_descriptor_data[18] = {
                          0x00,          /* bDeviceProtocol.                 */
                          0x40,          /* bMaxPacketSize.                  */
                          0x0483,        /* idVendor (ST).                   */
-                         0xFACE,        /* idProduct.                       */
+                         0xF00D,        /* idProduct.                       */
                          0x0200,        /* bcdDevice.                       */
                          1,             /* iManufacturer.                   */
                          2,             /* iProduct.                        */
@@ -102,7 +102,7 @@ static const uint8_t usb_configuration_descriptor_data[32] = { // 32 bytes - onl
                          0xFF),         /* bInterval.                       */
 #else
   /* Interface Descriptor. 9 byte macro */
-  USB_DESC_INTERFACE    (0x01,          /* bInterfaceNumber.                */
+  USB_DESC_INTERFACE    (0x00,          /* bInterfaceNumber.                */
                          0x00,          /* bAlternateSetting.               */
                          0x02,          /* bNumEndpoints.                   */
                          0xFF,          /* bInterfaceClass                  */
@@ -112,7 +112,7 @@ static const uint8_t usb_configuration_descriptor_data[32] = { // 32 bytes - onl
   /* Endpoint 3 Descriptor. 7 byte macro */
   USB_DESC_ENDPOINT     (USBD1_DATA_AVAILABLE_EP,       /* bEndpointAddress. */
                          0x03,                          /* bmAttributes (Interrupt). */
-                         0x0040,                        /* wMaxPacketSize.  */
+                         0x0040,// TODO:!                        /* wMaxPacketSize.  */
                          CHUNK_INTERVAL_FS),            /* bInterval. */
   /* Endpoint 1 Descriptor.*/
   USB_DESC_ENDPOINT     (USBD1_DATA_REQUEST_EP|0x80,    /* bEndpointAddress.*/
@@ -157,13 +157,13 @@ static const uint8_t usb_string1[] = {
  * Device Description string.
  */
 static const uint8_t usb_string2[] = {
-  USB_DESC_BYTE(70),                    /* bLength.                         */
+  USB_DESC_BYTE(68),                    /* bLength.                         */
   USB_DESC_BYTE(USB_DESCRIPTOR_STRING), /* bDescriptorType.                 */
   'C', 0, 'h', 0, 'i', 0, 'b', 0, 'i', 0, 'O', 0, 'S', 0, '/', 0,
   'R', 0, 'T', 0, ' ', 0, 'F', 0, 'i', 0, 'l', 0, 'i', 0, 'p', 0,
   'U', 0, 'S', 0, 'B', 0, ' ', 0, 'A', 0, 'c', 0, 'c', 0, 'e', 0,
   'l', 0, 'e', 0, 'r', 0, 'o', 0, 'm', 0, 'e', 0, 't', 0, 'e', 0,
-  'r', 0, ' ', 0, '2', 0
+  'r', 0
 };
 
 /*
