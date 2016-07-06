@@ -6,6 +6,15 @@ The data is plotted on PC in real-time, as the data appears on the USB bus.
 
 ![alt tag](doc/livePlotExample.png)
 
+
+# Quick start for Windows
+
+1. Clone project
+2. Grab your STM32F4-Discovery and flash it with `bin/STM32/ch.elf`
+3. Download https://sourceforge.net/projects/libusb-win32/ and use its `inf-wizard.exe` to install a driver for the MCU
+4. Run 'python/usbReader.exe' to watch the live plots! [To be prepared]
+
+
 # ChibiOS
 STM32 runs elegant and simple RTOS, ChibiOS/RT (http://www.chibios.org/dokuwiki/doku.php?id=chibios:book:start). ChibiOS project also provides HAL and drivers for all major hardware interfaces.
 
@@ -20,4 +29,4 @@ USB bus activity was sniffed and debugged using USBlyzer 2.0. (http://www.usblyz
 
 # Data flow
 
-MEMS accelerometer --(SPI)--> STM32 --(USB)--> PC --> matplotlib
+MEMS accelerometer --(SPI)--> STM32F4 --(USB FS)--> PC --> plot
