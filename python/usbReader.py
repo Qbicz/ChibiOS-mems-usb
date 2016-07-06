@@ -34,6 +34,7 @@ class UsbLivePlot:
         self.ax2 = self.fig.add_subplot(3,1,2)
         self.ax3 = self.fig.add_subplot(3,1,3)
         self.startTime = time.time()
+        self.timeOverflow = 0
         
         # TODO: add angles subplots on the right side of the window
         
@@ -56,13 +57,13 @@ class UsbLivePlot:
         z = []
         t = []
         # Byte arrays to integers, time is uint16
-        for i in range(len(xbytes)):
+        for i in range(self.datasize):
             x.append(self.accel_byte2g(xbytes[i]))
             y.append(self.accel_byte2g(ybytes[i]))
             z.append(self.accel_byte2g(zbytes[i]))
             
             t_tmp = int.from_bytes(tbytes[2*i:2*i+2], byteorder='little', signed=False)
-            t.append(t_tmp/1000) # seconds
+            t.append(t_tmp/1000 + self.timeOverflow) # seconds
         
         return x,y,z,t # little endian transmission
         
@@ -87,6 +88,7 @@ class UsbLivePlot:
             return
             
         xbuf,ybuf,zbuf,tMcu = self.xyzFromUsb(usbData)
+           
         
         #t = time.time() - self.startTime
         
@@ -96,11 +98,19 @@ class UsbLivePlot:
         
         
         # use extend() instead of append() to have 1-D list where plot lines make sense
-        # note: data obtained from
+        # note: data obtained from USB is little endian so it is locally reversed. it does not matter until we use time from MCU
         self.timear.extend(tMcu)
         self.xar.extend(xbuf)
         self.yar.extend(ybuf)
         self.zar.extend(zbuf)
+        
+        # Check if time have overflown
+        if len(self.timear) > (self.datasize + 1):
+            if self.timear[-1] < self.timear[-self.datasize-1]:
+                self.timeOverflow += 65.535
+                for val in self.timear[-self.datasize:-1]:
+                    val += self.timeOverflow
+        
                
         self.ax1.clear()
         self.ax2.clear()
