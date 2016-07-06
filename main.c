@@ -29,11 +29,11 @@
 #define LIS302DL_CTRL_DATAREADY1    0x04
 
 /* Number of data points sent in USB packet */
-#define CHUNK 16
+#define CHUNK 12
 
 /* Accel data - common for all threads, only modified in AccelThread */
 static int8_t xbuf[CHUNK], ybuf[CHUNK], zbuf[CHUNK];
-//static uint16_t timebuf[CHUNK];
+static uint16_t timebuf[CHUNK];
 
 /* static struct AccelData
 {
@@ -146,11 +146,11 @@ static THD_FUNCTION(Writer, arg) {
 
   while (true) {
     /* Concatenate accelerometer data */
-    uint8_t usbBuf[3*CHUNK];
+    uint8_t usbBuf[5*CHUNK];
     memcpy(usbBuf                            , &xbuf, sizeof(xbuf));
     memcpy(usbBuf+sizeof(xbuf)               , &ybuf, sizeof(ybuf));
     memcpy(usbBuf+2*sizeof(xbuf)             , &zbuf, sizeof(zbuf));
-    //memcpy(usbBuf+3*sizeof(xbuf)             , &timebuf, sizeof(timebuf));
+    memcpy(usbBuf+3*sizeof(xbuf)             , &timebuf, sizeof(timebuf));
 
     // TODO: USB interrupts
     // TODO: ep1outstate.thread
@@ -158,7 +158,7 @@ static THD_FUNCTION(Writer, arg) {
     msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP, usbBuf, sizeof(usbBuf));
 
     /* Indicate 1 Hz on red LED */
-    if(++usbCnt >= 25) // 25
+    if(++usbCnt >= 3) // 25
     {
       pwmState = pwmState ? 0x00 : 0xFF; /* toggle */
       pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)pwmState);
@@ -172,7 +172,7 @@ static THD_FUNCTION(Writer, arg) {
     //chThdSleepUntil(time += MS2ST(CHUNK*2.5f));
 
     if(msg == MSG_RESET)
-      chThdSleepMilliseconds(40);
+      chThdSleepMilliseconds(30);
   }
 }
 
@@ -191,7 +191,7 @@ static THD_FUNCTION(AccelThread, arg) {
   (void)arg;
   chRegSetThreadName("accelReader");
   tp_accel = chThdGetSelfX();
-  //const systime_t start = chVTGetSystemTime();
+  const systime_t start = chVTGetSystemTime();
 
   /* Accelerometer reader thread loop.*/
   while (true) {
@@ -205,7 +205,7 @@ static THD_FUNCTION(AccelThread, arg) {
       xbuf[i] = xbuf[i - 1];
       ybuf[i] = ybuf[i - 1];
       zbuf[i] = zbuf[i - 1];
-      //timebuf[i] = timebuf[i - 1];
+      timebuf[i] = timebuf[i - 1];
     }
 
     /* Reading MEMS accelerometer X, Y and Z registers.*/
@@ -213,7 +213,7 @@ static THD_FUNCTION(AccelThread, arg) {
     ybuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
     zbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
     /* Current time */
-    //timebuf[0] = (uint16_t)ST2MS(chVTTimeElapsedSinceX(start));
+    timebuf[0] = (uint16_t)ST2MS(chVTTimeElapsedSinceX(start));
 
     /* Reprogramming the three PWM channels using the accelerometer data.*/
     if (ybuf[0] < 0) {

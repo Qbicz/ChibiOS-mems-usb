@@ -31,7 +31,7 @@ class UsbLivePlot:
         # TODO: add angles subplots on the right side of the window
         
         # create buffers
-        self.datasize = 16
+        self.datasize = 12
         self.timear = []
         self.xar = []
         self.yar = []
@@ -42,23 +42,30 @@ class UsbLivePlot:
         xbytes = usbData[0              :self.datasize]
         ybytes = usbData[self.datasize  :2*self.datasize]
         zbytes = usbData[2*self.datasize:3*self.datasize]
-        #tbytes = usbData[3*self.datasize:(3+2)*self.datasize]
+        tbytes = usbData[3*self.datasize:(3+2)*self.datasize]
+        
+        #print(tbytes)
         
         x = []
         y = []
         z = []
+        t = []
         # Arrays to integers, time is uint16
         for i in range(len(xbytes)):
             x.append(xbytes[i] - 256 if xbytes[i] > 127 else xbytes[i])
             y.append(ybytes[i] - 256 if ybytes[i] > 127 else ybytes[i])
             z.append(zbytes[i] - 256 if zbytes[i] > 127 else zbytes[i])
+            t_tmp = int.from_bytes(tbytes[2*i:2*i+2], byteorder='little', signed=False)
+            t.append(t_tmp)
+            #print(t_tmp)
+            #print(tbytes[2*i:2*i+2])
             
         # convert from (-128,+128) to g values; approx 54 lsb = 1g
         #x = x*0.0185
         #y = y*0.0185
         #z = z*0.0185
         
-        return x,y,z
+        return x,y,z,t # little endian transmission
         
         
     def usbReadToFile(self, filename):
@@ -71,19 +78,19 @@ class UsbLivePlot:
         # Read USB    
         timeout = 50
         try:
-            usbData = self.usbDev.read(self.epIn.bEndpointAddress, 3*self.datasize, timeout)
+            usbData = self.usbDev.read(self.epIn.bEndpointAddress, 5*self.datasize, timeout)
         except usb.core.USBError as e:
             print('Data not read:', e)
             return
             
-        xbuf,ybuf,zbuf = self.xyzFromUsb(usbData)
+        xbuf,ybuf,zbuf,tMcu = self.xyzFromUsb(usbData)
         
         # TODO: timestamps should be created by MCU
-        t = time.time() - self.startTime
+        #t = time.time() - self.startTime
         
-        timegen = []
-        for i in range(self.datasize):
-            timegen.append(t + i*0.025) # seconds
+        #timegen = []
+        #for i in range(self.datasize):
+        #    timegen.append(t + i*0.025) # seconds
         
         
         # count time in loop
@@ -93,7 +100,7 @@ class UsbLivePlot:
           
         #file.close()
         
-        self.timear.append(timegen)
+        self.timear.append(tMcu)
         self.xar.append(xbuf)
         self.yar.append(ybuf)
         self.zar.append(zbuf)
@@ -137,7 +144,7 @@ def main():
     usbLive.filename = 'acceleration.log'
     
     # Create a self-updating plot
-    ani = animation.FuncAnimation(usbLive.fig, usbLive.animate, interval = 40)
+    ani = animation.FuncAnimation(usbLive.fig, usbLive.animate, interval = 30)
     plt.show()
     
 
