@@ -169,10 +169,10 @@ static THD_FUNCTION(Writer, arg) {
     //chThdSleepMilliseconds(CHUNK*2.5f);
 
     /* Accurately 400Hz: Waiting until the next 40 milliseconds time interval */
-    chThdSleepUntil(time += MS2ST(CHUNK*2.5f));
+    //chThdSleepUntil(time += MS2ST(CHUNK*2.5f));
 
     if(msg == MSG_RESET)
-      chThdSleepMilliseconds(5);
+      chThdSleepMilliseconds(40);
   }
 }
 
