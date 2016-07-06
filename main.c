@@ -35,15 +35,6 @@
 static int8_t xbuf[CHUNK], ybuf[CHUNK], zbuf[CHUNK];
 static uint16_t timebuf[CHUNK];
 
-/* static struct AccelData
-{
-   int8_t x, y, z;
-   uint16_t t;
-} accd; */
-// TODO: check sizeof(accd) - if data is padded
-
-//static int8_t x, y, z;
-
 /* Thread structure pointer used when switching threads */
 static thread_t *tp_accel;
 
@@ -142,37 +133,32 @@ static THD_FUNCTION(Writer, arg) {
   static uint8_t usbCnt;
   static int8_t pwmState;
 
-  // TODO: STM32_OTG1_EP1OUT_HANDLER
-
   while (true) {
-    /* Concatenate accelerometer data */
+    /* Concatenate accelerometer data:
+     * [x - 12 bytes
+     *  y - 12 bytes
+     *  z - 12 bytes
+     *  time - 24 bytes]
+     *  Max size of USB FS frame is 64 bytes */
     uint8_t usbBuf[5*CHUNK];
-    memcpy(usbBuf                            , &xbuf, sizeof(xbuf));
-    memcpy(usbBuf+sizeof(xbuf)               , &ybuf, sizeof(ybuf));
-    memcpy(usbBuf+2*sizeof(xbuf)             , &zbuf, sizeof(zbuf));
-    memcpy(usbBuf+3*sizeof(xbuf)             , &timebuf, sizeof(timebuf));
-
-    // TODO: USB interrupts
-    // TODO: ep1outstate.thread
+    memcpy(usbBuf                   , &xbuf, sizeof(xbuf));
+    memcpy(usbBuf+  sizeof(xbuf)    , &ybuf, sizeof(ybuf));
+    memcpy(usbBuf+2*sizeof(xbuf)    , &zbuf, sizeof(zbuf));
+    memcpy(usbBuf+3*sizeof(xbuf)    , &timebuf, sizeof(timebuf));
 
     msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP, usbBuf, sizeof(usbBuf));
 
-    /* Indicate 1 Hz on red LED */
-    if(++usbCnt >= 3) // 25
+    /* Indicate thread frequency on red LED */
+    if(++usbCnt >= 1)
     {
       pwmState = pwmState ? 0x00 : 0xFF; /* toggle */
       pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)pwmState);
       usbCnt = 0;
     }
 
-    /* Operate at 400Hz, not accurately (time error cumulation) */
-    //chThdSleepMilliseconds(CHUNK*2.5f);
-
-    /* Accurately 400Hz: Waiting until the next 40 milliseconds time interval */
-    //chThdSleepUntil(time += MS2ST(CHUNK*2.5f));
-
+    /* Operate at (400/CHUNK) Hz : Waiting until the next 30 milliseconds time interval */
     if(msg == MSG_RESET)
-      chThdSleepMilliseconds(30);
+      chThdSleepUntil(time += MS2ST(CHUNK*2.5f));
   }
 }
 
@@ -182,9 +168,6 @@ static THD_FUNCTION(Writer, arg) {
  */
 static THD_WORKING_AREA(waThread1, 128);
 static THD_FUNCTION(AccelThread, arg) {
-#if 0
-  static int8_t xbuf[CHUNK], ybuf[CHUNK], zbuf[CHUNK];  /* Last accelerometer data.*/
-#endif
   static uint8_t readCnt;
   static int8_t pwmState;
 
@@ -215,7 +198,9 @@ static THD_FUNCTION(AccelThread, arg) {
     /* Current time */
     timebuf[0] = (uint16_t)ST2MS(chVTTimeElapsedSinceX(start));
 
-    /* Reprogramming the three PWM channels using the accelerometer data.*/
+    /* Reprogramming orange and green PWM channels using the accelerometer data.
+     * Blue - 1Hz when reading accel data
+     * Red - toggle when USB packet sent */
     if (ybuf[0] < 0) {
       pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)-ybuf[0]);
       //pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)0);
