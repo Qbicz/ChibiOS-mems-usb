@@ -11,7 +11,7 @@ class UsbLivePlot:
     def __init__(self):
     
         # find our device - Vendor ST, Product STM32F4
-        self.usbDev = usb.core.find(idVendor=0x0483, idProduct=0xFACE)
+        self.usbDev = usb.core.find(idVendor=0x0483, idProduct=0xF00D)
         if self.usbDev is None:
             raise ValueError('Device not found')
             
@@ -31,7 +31,7 @@ class UsbLivePlot:
         # TODO: add angles subplots on the right side of the window
         
         # create buffers
-        self.datasize = 1
+        self.datasize = 16
         self.timear = []
         self.xar = []
         self.yar = []
@@ -42,16 +42,24 @@ class UsbLivePlot:
         xbytes = usbData[0              :self.datasize]
         ybytes = usbData[self.datasize  :2*self.datasize]
         zbytes = usbData[2*self.datasize:3*self.datasize]
+        #tbytes = usbData[3*self.datasize:(3+2)*self.datasize]
         
-        x = int.from_bytes(xbytes, byteorder='little', signed='false')
-        y = int.from_bytes(ybytes, byteorder='little', signed='false')
-        z = int.from_bytes(zbytes, byteorder='little', signed='false')
+        x = []
+        y = []
+        z = []
+        # Arrays to integers, time is uint16
+        for i in range(len(xbytes)):
+            x.append(xbytes[i] - 256 if xbytes[i] > 127 else xbytes[i])
+            y.append(ybytes[i] - 256 if ybytes[i] > 127 else ybytes[i])
+            z.append(zbytes[i] - 256 if zbytes[i] > 127 else zbytes[i])
+            
         # convert from (-128,+128) to g values; approx 54 lsb = 1g
-        x = x*0.0185
-        y = y*0.0185
-        z = z*0.0185
+        #x = x*0.0185
+        #y = y*0.0185
+        #z = z*0.0185
         
         return x,y,z
+        
         
     def usbReadToFile(self, filename):
         pass
@@ -60,35 +68,50 @@ class UsbLivePlot:
         
     def animate(self, i):
         
-        # Read USB       
-        usbData = self.usbDev.read(self.epIn.bEndpointAddress, 3*self.datasize)
-        x,y,z = self.xyzFromUsb(usbData)
+        # Read USB    
+        timeout = 50
+        try:
+            usbData = self.usbDev.read(self.epIn.bEndpointAddress, 3*self.datasize, timeout)
+        except usb.core.USBError as e:
+            print('Data not read:', e)
+            return
+            
+        xbuf,ybuf,zbuf = self.xyzFromUsb(usbData)
         
         # TODO: timestamps should be created by MCU
         t = time.time() - self.startTime
         
-        # Log
-        with open(self.filename, 'a') as file:
-            file.write('%.3f %.3f %.3f %.3f\n' % (t,x,y,z))
-            
+        timegen = []
+        for i in range(self.datasize):
+            timegen.append(t + i*0.025) # seconds
         
-        # self.timear.append(float(t))
-        # self.xar.append(x)
-        # self.yar.append(y)
-        # self.zar.append(z)
+        
+        # count time in loop
+        
+        # Open log
+        #file = open(self.filename, 'a')
+          
+        #file.close()
+        
+        self.timear.append(timegen)
+        self.xar.append(xbuf)
+        self.yar.append(ybuf)
+        self.zar.append(zbuf)
                
-        # self.ax1.clear()
-        # self.ax2.clear()
-        # self.ax3.clear()
-        # self.ax1.plot(self.timear, self.xar)
-        # self.ax2.plot(self.timear, self.yar)
-        # self.ax3.plot(self.timear, self.zar)
+        print
+               
+        self.ax1.clear()
+        self.ax2.clear()
+        self.ax3.clear()
+        self.ax1.plot(self.timear, self.xar, marker='.', linestyle='None')
+        self.ax2.plot(self.timear, self.yar, marker='.', linestyle='None')
+        self.ax3.plot(self.timear, self.zar, marker='.', linestyle='None')
         
-        # self.ax1.set_title('Acceleration from STM32F4Discovery')
-        # self.ax1.set_ylabel('x-axis [g]')
-        # self.ax2.set_ylabel('y-axis [g]')
-        # self.ax3.set_ylabel('z-axis [g]')
-        # self.ax3.set_xlabel('Time [s]')
+        self.ax1.set_title('Acceleration from STM32F4Discovery')
+        self.ax1.set_ylabel('x-axis [g]')
+        self.ax2.set_ylabel('y-axis [g]')
+        self.ax3.set_ylabel('z-axis [g]')
+        self.ax3.set_xlabel('Time [s]')
         
         
     def findEndpoint(self, direction):
@@ -114,8 +137,7 @@ def main():
     usbLive.filename = 'acceleration.log'
     
     # Create a self-updating plot
-    ani = animation.FuncAnimation(usbLive.fig, usbLive.animate, interval = 1) # TODO: use USB data ready interrupt
-    plt.title('STM32F4 Discovery accelerometers')
+    ani = animation.FuncAnimation(usbLive.fig, usbLive.animate, interval = 40)
     plt.show()
     
 

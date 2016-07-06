@@ -18,8 +18,9 @@
 #include "hal.h"
 
 #include "lis302dl.h"
-
 #include "usbcfg.h"
+
+#include <string.h> /* for memcpy() */
 
 /* Accelerometer configuration bits - not included in lis302dl.h */
 #define LIS302DL_CTRL_XYZ_EN        0x07
@@ -27,15 +28,25 @@
 #define LIS302DL_CTRL_400HZ         0x80
 #define LIS302DL_CTRL_DATAREADY1    0x04
 
-#define CHUNK 1
+/* Number of data points sent in USB packet */
+#define CHUNK 16
 
 /* Accel data - common for all threads, only modified in AccelThread */
-static int8_t x, y, z;
-// TODO: use Chibi Mailboxes instead
+static int8_t xbuf[CHUNK], ybuf[CHUNK], zbuf[CHUNK];
+//static uint16_t timebuf[CHUNK];
 
-//static uint8_t rxbuf[8];
+/* static struct AccelData
+{
+   int8_t x, y, z;
+   uint16_t t;
+} accd; */
+// TODO: check sizeof(accd) - if data is padded
 
+//static int8_t x, y, z;
+
+/* Thread structure pointer used when switching threads */
 static thread_t *tp_accel;
+
 /*===========================================================================*/
 /* Accelerometer related.                                                    */
 /*===========================================================================*/
@@ -114,14 +125,11 @@ static const EXTConfig extcfg = {
   }
 };
 
-
-   // TODO: check STM32_OTG2_EP1OUT_HANDLER
-
 /*===========================================================================*/
 /* Threads.                                                                  */
 /*===========================================================================*/
 #define TEST_WA_SIZE    THD_WORKING_AREA_SIZE(256)
-#if 1
+
 /*
  * USB writer. This thread writes accelerometer data to the USB at maximum rate.
  */
@@ -130,43 +138,110 @@ static THD_FUNCTION(Writer, arg) {
 
   (void)arg;
   chRegSetThreadName("writer");
+  systime_t time = chVTGetSystemTime();
+  static uint8_t usbCnt;
+  static int8_t pwmState;
+
+  // TODO: STM32_OTG1_EP1OUT_HANDLER
 
   while (true) {
     /* Concatenate accelerometer data */
-    uint8_t xyzbuf[3];
-    memcpy(xyzbuf                       , &x, sizeof(x));
-    memcpy(xyzbuf+sizeof(x)             , &y, sizeof(y));
-    memcpy(xyzbuf+sizeof(x)+sizeof(y)   , &z, sizeof(z));
+    uint8_t usbBuf[3*CHUNK];
+    memcpy(usbBuf                            , &xbuf, sizeof(xbuf));
+    memcpy(usbBuf+sizeof(xbuf)               , &ybuf, sizeof(ybuf));
+    memcpy(usbBuf+2*sizeof(xbuf)             , &zbuf, sizeof(zbuf));
+    //memcpy(usbBuf+3*sizeof(xbuf)             , &timebuf, sizeof(timebuf));
 
     // TODO: USB interrupts
-    msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP,
-                            xyzbuf, sizeof(xyzbuf));
-                            //txbuf, sizeof (txbuf) - 1);
-    //if (msg == MSG_RESET)
-    chThdSleepMilliseconds(2.5);
+    // TODO: ep1outstate.thread
+
+    msg_t msg = usbTransmit(&USBD1, USBD1_DATA_REQUEST_EP, usbBuf, sizeof(usbBuf));
+
+    /* Indicate 1 Hz on red LED */
+    if(++usbCnt >= 25) // 25
+    {
+      pwmState = pwmState ? 0x00 : 0xFF; /* toggle */
+      pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)pwmState);
+      usbCnt = 0;
+    }
+
+    /* Operate at 400Hz, not accurately (time error cumulation) */
+    //chThdSleepMilliseconds(CHUNK*2.5f);
+
+    /* Accurately 400Hz: Waiting until the next 40 milliseconds time interval */
+    //chThdSleepUntil(time += MS2ST(CHUNK*2.5f));
+
+    if(msg == MSG_RESET)
+      chThdSleepMilliseconds(40);
   }
 }
-#endif
 
-#ifdef READER
 /*
- * USB reader. This thread reads data from the USB at maximum rate.
- * Can be measured using:
- *   dd if=bigfile of=/dev/xxx bs=512 count=10000
+ * This is a data-ready-triggered thread that reads accelerometer and outputs
+ * result to PWM. Read data is available for USB Writer thread.
  */
-static THD_WORKING_AREA(waReader, 128);
-static THD_FUNCTION(Reader, arg) {
+static THD_WORKING_AREA(waThread1, 128);
+static THD_FUNCTION(AccelThread, arg) {
+#if 0
+  static int8_t xbuf[CHUNK], ybuf[CHUNK], zbuf[CHUNK];  /* Last accelerometer data.*/
+#endif
+  static uint8_t readCnt;
+  static int8_t pwmState;
 
   (void)arg;
-  chRegSetThreadName("reader");
+  chRegSetThreadName("accelReader");
+  tp_accel = chThdGetSelfX();
+  //const systime_t start = chVTGetSystemTime();
+
+  /* Accelerometer reader thread loop.*/
   while (true) {
-    msg_t msg = usbReceive(&USBD1, USBD1_DATA_AVAILABLE_EP,
-                           rxbuf, sizeof (rxbuf) - 1);
-    if (msg == MSG_RESET)
-      chThdSleepMilliseconds(50);
+
+    /* Checks if an IRQ happened else wait.*/
+    chEvtWaitAny((eventmask_t)1);
+
+    unsigned i;
+    /* Keeping an history of the latest accelerometer readings with timestamp */
+    for (i = CHUNK-1; i > 0; i--) {
+      xbuf[i] = xbuf[i - 1];
+      ybuf[i] = ybuf[i - 1];
+      zbuf[i] = zbuf[i - 1];
+      //timebuf[i] = timebuf[i - 1];
+    }
+
+    /* Reading MEMS accelerometer X, Y and Z registers.*/
+    xbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
+    ybuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
+    zbuf[0] = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
+    /* Current time */
+    //timebuf[0] = (uint16_t)ST2MS(chVTTimeElapsedSinceX(start));
+
+    /* Reprogramming the three PWM channels using the accelerometer data.*/
+    if (ybuf[0] < 0) {
+      pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)-ybuf[0]);
+      //pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)0);
+    }
+    else {
+      //pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)ybuf[0]);
+      pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)0);
+    }
+    if (xbuf[0] < 0) {
+      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)-xbuf[0]);
+      //pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)0);
+    }
+    else {
+      //pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)xbuf[0]);
+      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
+    }
+
+    /* Indicate 1 Hz on blue LED */
+    if(++readCnt >= 200)
+    {
+      pwmState = pwmState ? 0x00 : 0xFF; /* toggle */
+      pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)pwmState);
+      readCnt = 0;
+    }
   }
 }
-#endif
 
 /*
    * LIS302DL initialization: X,Y,Z axes with 400Hz rate,
@@ -197,56 +272,6 @@ static void lis302init(void)
   lis302dlWriteRegister(&SPID1, LIS302DL_CTRL_REG1,
              LIS302DL_CTRL_XYZ_EN | LIS302DL_CTRL_POWER | LIS302DL_CTRL_400HZ);
 }
-
-
-/*
- * This is a data-ready-triggered thread that reads accelerometer and outputs
- * result to PWM.
- */
-static THD_WORKING_AREA(waThread1, 128);
-static THD_FUNCTION(AccelThread, arg) {
-#if 0
-  static int8_t xbuf[CHUNK], ybuf[CHUNK], zbuf[CHUNK];  /* Last accelerometer data.*/
-  static uint8_t usbCnt;
-#endif
-
-  (void)arg;
-  chRegSetThreadName("accelReader");
-  tp_accel = chThdGetSelfX();
-
-  /* Reader thread loop.*/
-  while (true) {
-
-    /* Checks if an IRQ happened else wait.*/
-    chEvtWaitAny((eventmask_t)1);
-
-    /* Reading MEMS accelerometer X, Y and Z registers.*/
-    x = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTX);
-    y = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTY);
-    z = (int8_t)lis302dlReadRegister(&SPID1, LIS302DL_OUTZ);
-    //zbuf[0]
-
-    /* Reprogramming the four PWM channels using the accelerometer data.*/
-    if (y < 0) {
-      pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)-y);
-      pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)0);
-    }
-    else {
-      pwmEnableChannel(&PWMD4, 2, (pwmcnt_t)y);
-      pwmEnableChannel(&PWMD4, 0, (pwmcnt_t)0);
-    }
-    if (x < 0) {
-      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)-x);
-      pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)0);
-    }
-    else {
-      pwmEnableChannel(&PWMD4, 3, (pwmcnt_t)x);
-      pwmEnableChannel(&PWMD4, 1, (pwmcnt_t)0);
-    }
-
-  }
-}
-
 
 /*===========================================================================*/
 /* Initialization and main thread.                                           */
@@ -286,7 +311,7 @@ int main(void) {
   /*
    * Initializes the EXT Driver to react to LIS302 interrupt on PE0 pin of Discovery board.
    */
-  extStart(&EXTD1, &extcfg);    // GPIO E
+  extStart(&EXTD1, &extcfg);
 
   /*
    * Initializes accelerometer with PE0 external interrupt on data ready.
@@ -307,13 +332,11 @@ int main(void) {
    */
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO, AccelThread, NULL);
   chThdCreateStatic(waWriter, sizeof(waWriter), NORMALPRIO, Writer, NULL);
-  // chThdCreateStatic(waReader, sizeof(waReader), NORMALPRIO, Reader, NULL);
-
 
   /*
    * Normal main() thread activity
    */
   while (true) {
-    chThdSleepMilliseconds(50);
+    chThdSleepMilliseconds(200);
   }
 }
