@@ -20,11 +20,17 @@ STM32 runs elegant and simple RTOS, ChibiOS/RT (http://www.chibios.org/dokuwiki/
 
 
 # Live Plot
-In /pyusb directory a class for plotting the data gathered from USB is supplied. It depends on python3, pyUSB (https://github.com/walac/pyusb) and matplotlib (http://matplotlib.org).
+In `python` directory a class for plotting the data gathered from USB is supplied. It depends on python3, pyUSB (https://github.com/walac/pyusb) and matplotlib (http://matplotlib.org).
+
+```python
+cd python
+pip3 install pyusb
+pip3 install matplotlib
+python3 usbReader.py
+```
 
 # Debugging
 USB bus activity was sniffed and debugged using USBlyzer 2.0. (http://www.usblyzer.com/)
-
 
 
 # Data flow
