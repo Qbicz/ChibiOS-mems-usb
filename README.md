@@ -16,7 +16,7 @@ The data is plotted on PC in real-time, as the data appears on the USB bus.
 
 
 # ChibiOS
-STM32 runs elegant and simple RTOS, ChibiOS/RT (http://www.chibios.org/dokuwiki/doku.php?id=chibios:book:start). ChibiOS project also provides HAL and drivers for all major hardware interfaces.
+STM32 runs elegant and simple RTOS, ChibiOS/RT (https://www.chibios.org/dokuwiki/). ChibiOS project also provides HAL and drivers for all major hardware interfaces.
 
 
 # Live Plot
